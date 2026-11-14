@@ -1,0 +1,22 @@
+[Unit]
+Description=Xianshushu single production scheduler
+After=network-online.target xianshushu-web.service
+Wants=network-online.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/xianshushu/live-app
+EnvironmentFile=/etc/xianshushu-production.env
+Environment=XIANSHUSHU_SCHEDULER=1
+ExecStart=/srv/xianshushu/live-venv/bin/python -u worker.py
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/xianshushu/live-data
+
+[Install]
+WantedBy=multi-user.target

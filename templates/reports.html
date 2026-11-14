@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}利润报表 - 闲书书{% endblock %}
+{% block content %}
+<div class="topbar"><strong>利润报表</strong></div>
+
+<div class="card p-3 mb-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="btn-group btn-group-sm">
+            {% for key,label in [('today','今日'),('week','本周'),('month','本月'),('custom','自定义')] %}
+            <a class="btn {{ 'btn-primary' if rng==key else 'btn-outline-secondary' }}"
+               href="{{ url_for('reports.index', range=key) }}">{{ label }}</a>
+            {% endfor %}
+        </div>
+        <form class="d-flex gap-2 align-items-center" method="get">
+            <input type="hidden" name="range" value="custom">
+            <input type="date" class="form-control form-control-sm" name="from" value="{{ date_from }}">
+            <span>至</span>
+            <input type="date" class="form-control form-control-sm" name="to" value="{{ date_to }}">
+            <button class="btn btn-sm btn-outline-secondary">查询</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="card p-3"><div class="text-muted small">订单数</div>
+        <div class="stat-num">{{ totals.cnt or 0 }}</div></div></div>
+    <div class="col-md-3"><div class="card p-3"><div class="text-muted small">销售额</div>
+        <div class="stat-num">¥{{ '%.2f'|format(totals.sales or 0) }}</div></div></div>
+    <div class="col-md-3"><div class="card p-3"><div class="text-muted small">成本</div>
+        <div class="stat-num">¥{{ '%.2f'|format(totals.cost or 0) }}</div></div></div>
+    <div class="col-md-3"><div class="card p-3"><div class="text-muted small">利润
+            {% if totals.sales %}<span class="badge text-bg-{{ 'success' if (totals.profit or 0)>=0 else 'danger' }} ms-1">{{ '%.1f'|format(100*(totals.profit or 0)/totals.sales) }}%</span>{% endif %}</div>
+        <div class="stat-num {{ 'text-success' if (totals.profit or 0)>=0 else 'text-danger' }}">¥{{ '%.2f'|format(totals.profit or 0) }}</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-7">
+        <div class="card p-3">
+            <h6>按天</h6>
+            <table class="table table-sm mt-2">
+                <thead class="table-light"><tr><th>日期</th><th class="text-end">订单</th><th class="text-end">销售额</th><th class="text-end">成本</th><th class="text-end">利润</th></tr></thead>
+                <tbody>
+                {% for r in daily %}<tr>
+                    <td>{{ r.d }}</td><td class="text-end">{{ r.cnt }}</td>
+                    <td class="text-end">¥{{ '%.2f'|format(r.sales or 0) }}</td>
+                    <td class="text-end">¥{{ '%.2f'|format(r.cost or 0) }}</td>
+                    <td class="text-end {{ 'text-success' if (r.profit or 0)>=0 else 'text-danger' }}">¥{{ '%.2f'|format(r.profit or 0) }}</td>
+                </tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-4">暂无数据</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card p-3 mb-3">
+            <h6>按闲鱼号</h6>
+            <table class="table table-sm mt-2">
+                <thead class="table-light"><tr><th>账号</th><th class="text-end">订单</th><th class="text-end">销售额</th><th class="text-end">利润</th></tr></thead>
+                <tbody>
+                {% for r in accounts %}<tr>
+                    <td>{{ r.shop_name or r.seller }}</td><td class="text-end">{{ r.cnt }}</td>
+                    <td class="text-end">¥{{ '%.2f'|format(r.sales or 0) }}</td>
+                    <td class="text-end">¥{{ '%.2f'|format(r.profit or 0) }}</td>
+                </tr>{% else %}<tr><td colspan="4" class="text-center text-muted py-4">暂无数据</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card p-3">
+            <h6>按月</h6>
+            <table class="table table-sm mt-2">
+                <thead class="table-light"><tr><th>月份</th><th class="text-end">订单</th><th class="text-end">销售额</th><th class="text-end">利润</th></tr></thead>
+                <tbody>
+                {% for r in monthly %}<tr>
+                    <td>{{ r.m }}</td><td class="text-end">{{ r.cnt }}</td>
+                    <td class="text-end">¥{{ '%.2f'|format(r.sales or 0) }}</td>
+                    <td class="text-end">¥{{ '%.2f'|format(r.profit or 0) }}</td>
+                </tr>{% else %}<tr><td colspan="4" class="text-center text-muted py-4">暂无数据</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+flask>=3.0
+apscheduler>=3.10
+playwright>=1.40
+requests>=2.31
+numpy>=1.23
+opencv-python>=4.8
+
+cryptography>=44,<50

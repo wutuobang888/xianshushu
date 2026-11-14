@@ -1,0 +1,34 @@
+# 放在正式 HTTPS server 内；会话验证同时保护静态窗口和 WebSocket。
+location = /_browser_auth {
+    internal;
+    proxy_pass http://127.0.0.1:5051/internal/browser-auth;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+location /internal/ { return 404; }
+location @browser_login {
+    return 302 /login?next=/browser/vnc.html%3Fautoconnect%3D1%26resize%3Dscale%26path%3D%2Fbrowser%2Fwebsockify;
+}
+location = /browser/browser/websockify {
+    rewrite ^ /browser/websockify last;
+}
+location = /browser/websockify {
+    auth_request /_browser_auth;
+    if ($http_origin != "https://books.example.com") { return 403; }
+    proxy_pass http://127.0.0.1:6080/websockify;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+location /browser/ {
+    auth_request /_browser_auth;
+    error_page 401 = @browser_login;
+    proxy_pass http://127.0.0.1:6080/;
+    proxy_set_header Host $host;
+    add_header Cache-Control "no-store" always;
+}

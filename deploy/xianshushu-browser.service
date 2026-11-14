@@ -1,0 +1,18 @@
+[Unit]
+Description=Xianshushu authenticated browser gateway backend
+After=xianshushu-vnc.service
+Requires=xianshushu-vnc.service
+
+[Service]
+User=www-data
+Group=www-data
+ExecStart=/usr/bin/websockify --web=/usr/share/novnc --heartbeat=30 127.0.0.1:6080 127.0.0.1:5900
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

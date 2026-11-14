@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "闲书书-孔夫子下单上报",
+  "version": "1.0",
+  "description": "孔夫子点提交订单后秒报本地站点，订单页出'已下单待付款'灰标",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://127.0.0.1:5000/*",
+    "http://localhost:5000/*",
+    "*://*.kongfz.com/*",
+    "*://kongfz.com/*"
+  ],
+  "background": { "service_worker": "sw.js" },
+  "content_scripts": [
+    {
+      "matches": ["*://*.kongfz.com/*", "*://kongfz.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}系统设置 - 闲书书{% endblock %}
+{% block content %}
+<div class="topbar"><strong>系统设置</strong></div>
+
+{% if cloud_mode %}
+<div class="card p-3 mb-3">
+    <h6>孔夫子免插件采购</h6>
+    <p class="small text-muted mb-0">从订单点击“找货源 / 去货源”，核对本单收货地址后直接打开普通孔夫子网页，无需插件或中间确认页。不同收货信息分别保存，完整相同的地址复用，不再反复改写同一个地址。浏览器需登录与服务器相同的孔夫子账号；请逐笔采购，切换订单后不要回到旧货源页购买，提交前核对收货人。地址满20条时，先备份再按孔夫子保存时间移除最早一条，为当前订单腾出位置；可连续处理超过20笔订单。</p>
+</div>
+{% endif %}
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card p-3 mb-3">
+            <h6>闲管家开放平台凭证</h6>
+            <form method="post" action="{{ url_for('settings.save_xgj') }}">
+                <label class="form-label small text-muted">AppKey</label>
+                <input class="form-control mb-2" name="app_key" value="{{ app_key }}" autocomplete="off">
+                <label class="form-label small text-muted">AppSecret</label>
+                <input class="form-control mb-3" type="password" name="app_secret" value="{{ app_secret }}" autocomplete="off">
+                <button class="btn btn-primary btn-sm">保存凭证</button>
+            </form>
+            <hr>
+            <div class="small text-muted">
+                当前模式：{% if demo %}<span class="badge text-bg-warning">演示模式</span>（未配 AppKey，同步/上架不会真的调接口）{% else %}<span class="badge text-bg-success">正式</span>{% endif %}
+                <br>孔夫子检查间隔：{{ check_interval }} 分钟（config.py 或环境变量改）
+            </div>
+        </div>
+        <div class="card p-3">
+            <h6>孔夫子登录</h6>
+            {% if cloud_mode %}
+            <p class="small text-muted">账号加密保存在你的服务器中，用于登录失效后的有限次数重登；遇到验证码需要你协助。</p>
+            <p class="small text-muted">服务器孔夫子窗口正在使用时，后台查单会等待；完成登录或填单后请关闭窗口中的浏览器。</p>
+            <p class="small">凭据：{{ '已保存' if kongfz_status.configured else '未填写' }}；
+                登录：{{ {'logged_in':'正常','verification_required':'需要人工验证','login_required':'请登录','login_failed':'登录未成功','saved':'已保存，待检查','logging_in':'正在登录','window_opening':'窗口正在打开'}.get(kongfz_status.state,'待检查') }}</p>
+            <form method="post" action="{{ url_for('settings.save_kongfz') }}">
+                <label class="form-label small">孔夫子账号</label>
+                <input class="form-control mb-2" name="username" autocomplete="username" required>
+                <label class="form-label small">孔夫子密码</label>
+                <input class="form-control mb-2" type="password" name="password" autocomplete="new-password" required>
+                <button class="btn btn-primary btn-sm">加密保存账号</button>
+            </form>
+            <div class="d-flex gap-2 mt-3">
+                <form method="post" action="{{ url_for('settings.login_kongfz') }}"><button class="btn btn-outline-primary btn-sm">启动登录窗口</button></form>
+                <a class="btn btn-outline-secondary btn-sm" href="/browser/vnc.html?autoconnect=1&amp;resize=scale&amp;path=/browser/websockify" target="_blank" rel="noopener">孔夫子窗口</a>
+            </div>
+            {% else %}
+            <p class="small text-muted mb-2">第一次用先跑命令登录一次孔夫子，浏览器会记住登录态：</p>
+            <code class="d-block bg-light border rounded p-2 small">cd xianshouself<br>python -m bots.kongfz_bot login</code>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3">
+            <h6>闲鱼账号映射</h6>
+            <form method="post" action="{{ url_for('settings.add_account') }}" class="row g-2 mb-3">
+                <div class="col-6"><input class="form-control form-control-sm" name="seller_id" placeholder="seller_id（闲管家返回）" required></div>
+                <div class="col-4"><input class="form-control form-control-sm" name="shop_name" placeholder="备注名"></div>
+                <div class="col-2"><button class="btn btn-sm btn-primary w-100">添加</button></div>
+            </form>
+            <table class="table table-sm">
+                <thead class="table-light"><tr><th>seller_id</th><th>备注</th><th></th></tr></thead>
+                <tbody>
+                {% for a in accounts %}<tr>
+                    <td><code>{{ a.seller_id }}</code></td><td>{{ a.shop_name }}</td>
+                    <td class="text-end">
+                        <form method="post" action="{{ url_for('settings.del_account', aid=a.id) }}" class="d-inline">
+                            <button class="btn btn-sm btn-outline-danger">停用</button>
+                        </form>
+                    </td>
+                </tr>{% else %}<tr><td colspan="3" class="text-muted text-center py-3">暂无账号</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

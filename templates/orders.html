@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}订单管理 - 闲书书{% endblock %}
+{% block content %}
+<div class="topbar">
+    <strong>订单管理</strong>
+    <form class="d-flex ms-auto gap-2 form-inline-sm" method="post" action="{{ url_for('orders.sync') }}">
+        <button class="btn btn-sm btn-outline-primary" type="submit">
+            <i class="bi bi-arrow-repeat"></i> 同步订单</button>
+    </form>
+</div>
+
+<div class="card p-3 mb-3">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="btn-group btn-group-sm">
+            {% set tabs = [('','全部'),('pending','待采购'),('need_confirm','待确认采购'),
+                          ('purchasing','采购中'),('shipped','已发货'),('completed','已完成'),
+                          ('refunding','退款中'),('refunded','已退款'),('closed','已关闭')] %}
+            {% for key,label in tabs %}
+            <a class="btn {{ 'btn-primary' if status==key else 'btn-outline-secondary' }}"
+               href="{{ url_for('orders.index', status=key) }}">{{ label }}
+                {% if key and counts.get(key) %}<span class="badge text-bg-light ms-1">{{ counts[key] }}</span>{% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        <form class="d-flex gap-2 ms-auto align-items-center" method="get"
+              action="{{ url_for('orders.index') }}">
+            <input type="hidden" name="status" value="{{ status }}">
+            <select class="form-select form-select-sm" style="width:auto" name="size"
+                    onchange="this.form.submit()">
+                {% for s in (30,50) %}
+                <option value="{{ s }}" {{ 'selected' if size==s }}>{{ s }} 条/页</option>
+                {% endfor %}
+            </select>
+            <select class="form-select form-select-sm" style="width:auto" name="sort"
+                    onchange="this.form.submit()">
+                <option value="desc" {{ 'selected' if sort=='desc' }}>最新在前</option>
+                <option value="asc" {{ 'selected' if sort=='asc' }}>最早在前</option>
+            </select>
+            <input class="form-control form-control-sm" style="width:220px" name="q"
+                   value="{{ keyword }}" placeholder="订单号 / 书名 / 买家">
+            <button class="btn btn-sm btn-outline-secondary">搜索</button>
+        </form>
+    </div>
+</div>
+
+<div class="card p-0">
+<table class="table table-hover align-middle mb-0">
+<thead class="table-light"><tr>
+    <th>订单号</th><th>店铺</th><th>书名</th><th>买家</th><th>地址</th>
+    <th class="text-end">售价</th><th class="text-end">利润</th>
+    <th>状态</th><th style="width:280px">操作</th>
+</tr></thead>
+<tbody>
+{% for o in orders %}
+<tr id="o{{ o.id }}">
+    <td class="text-nowrap"><small>{{ o.order_no }}</small><br><small class="text-muted">{{ o.order_time or o.created_at }}</small></td>
+    <td><small>{{ o.shop_name or o.seller_id or '-' }}</small></td>
+    <td>{{ o.product_title }}</td>
+    <td>{{ o.buyer_name }}
+        {% if o.repeat_customer %}<span class="badge text-bg-danger status-badge" title="这个买家在你店里买过不止一次">回头客</span>{% endif %}</td>
+    <td><small class="{{ 'text-danger fw-bold' if o.remote_area else 'text-muted' }}"
+               title="{{ o.buyer_address }}{{ '（偏远省份，注意运费）' if o.remote_area }}">
+        {{ (o.buyer_address or '')[:18] }}{{ '…' if (o.buyer_address or '')|length > 18 }}</small></td>
+    <td class="text-end">¥{{ '%.2f'|format(o.sale_price or 0) }}</td>
+    <td class="text-end {{ 'text-success' if (o.profit or 0)>=0 else 'text-danger' }}">
+        {% if o.profit is not none %}¥{{ '%.2f'|format(o.profit) }}{% else %}-{% endif %}</td>
+    <td>
+        {% set m = {'pending':'warning','purchasing':'info','shipped':'primary',
+                    'completed':'success','refunding':'danger','refunded':'secondary',
+                    'closed':'secondary'} %}
+        {% set zh = {'pending':'待采购','purchasing':'采购中','shipped':'已发货',
+                     'completed':'已完成','refunding':'退款中','refunded':'已退款',
+                     'closed':'已关闭'} %}
+        <span class="badge text-bg-{{ m.get(o.status,'secondary') }} status-badge">{{ zh.get(o.status,o.status) }}</span>
+        {% if o.alert %}<div class="small text-danger mt-1">⚠ {{ o.alert }}</div>{% endif %}
+    </td>
+    <td>
+        {% if o.status in ('pending','purchasing') %}
+        <a class="btn btn-sm {{ 'btn-success' if o.jump_direct else 'btn-outline-primary' }} mb-1"
+           href="{{ url_for('orders.source_prepare', oid=o.id) if cloud_mode else o.jump_url }}" target="_blank" rel="noopener" title="{{ '核对本单地址后直接打开孔夫子' if cloud_mode else o.jump_url }}"
+           {% if cloud_mode %}data-xss-native-source="{{ o.id }}" data-source-url="{{ o.jump_url }}"{% else %}data-xss-order="{{ o.id }}" onclick="prepareSource({{ o.id }})"{% endif %}>
+            <i class="bi {{ 'bi-box-arrow-up-right' if o.jump_direct else 'bi-search' }}"></i>
+            {{ '去货源' if o.jump_direct else '找货源' }}</a>
+        {% if cloud_mode %}<small class="d-block mb-1" data-source-sync-status="{{ o.id }}" role="status" aria-live="polite" hidden></small>{% endif %}
+        {% if not cloud_mode %}
+        <button class="btn btn-sm btn-outline-danger mb-1" type="button"
+                onclick="fillCheckout({{ o.id }}, {{ 'true' if o.kongfz_url else 'false' }})"
+                title="打开孔夫子下单页并自动填好收货地址（不提交，自己核对付款）">
+            <i class="bi bi-clipboard-check"></i> 填单</button>
+        {% endif %}
+        {% if o.kongfz_order_no %}
+        <div class="small text-nowrap">
+            已绑孔夫子：
+            {% for no in o.kongfz_order_no.split(',') %}
+            <a href="https://order.kongfz.com/order-views/management/buyer/detail/{{ no }}"
+               target="_blank" title="打开孔夫子订单详情">{{ no }}</a>{{ ', ' if not loop.last }}
+            {% endfor %}
+            <span class="text-muted">记录成本{{ ('¥%.2f'|format(o.kongfz_price)) if o.kongfz_price is not none else '待核对' }}</span>
+        </div>
+        <details class="small text-muted">
+            <summary>逐笔采购金额与来源</summary>
+            {% for purchase in purchase_map.get(o.id, []) %}
+            <div>{{ purchase.kongfz_order_no }}：
+                {% if purchase.paid_amount_fen is not none %}¥{{ '%.2f'|format(purchase.paid_amount_fen / 100) }}
+                {% else %}金额待核对{% endif %}
+                {% if purchase.amount_basis == 'list_total' %}（列表订单总额）
+                {% elif purchase.amount_basis == 'manual' %}（人工填写）{% endif %}
+            </div>
+            {% endfor %}
+        </details>
+        {% endif %}
+        <form class="d-flex gap-1 flex-wrap" method="post" action="{{ url_for('orders.bind', oid=o.id) }}">
+            <input type="hidden" name="status" value="{{ status }}">
+            <input class="form-control form-control-sm" style="width:110px" name="kongfz_order_no"
+                   placeholder="{{ '加绑单号' if o.kongfz_order_no else '孔夫子单号' }}" required
+                   autocomplete="off">
+            <input class="form-control form-control-sm" style="width:60px" name="kongfz_price"
+                   placeholder="成本" autocomplete="off">
+            <button class="btn btn-sm btn-primary text-nowrap">绑定</button>
+        </form>
+        {# 孔夫子已下单待付款：油猴上报/监控扫到/手动标记的灰色提示（未付款不绑定） #}
+        {% set hints = unpaid_map.get(o.id) %}
+        {% set manual_marked = hints and (hints|selectattr('manual')|list|length > 0) %}
+        <div id="hints-{{ o.id }}">
+        {% if hints %}
+        <div class="border rounded p-1 mt-1 bg-light">
+            <small class="text-muted d-block">孔夫子已下单待付款：</small>
+            {% for h in hints %}
+            {% if h.manual %}
+            <small class="d-block text-info">已下单（手动标记）</small>
+            {% else %}
+            <small class="d-block text-muted" title="{{ h.name }}">
+                {% if h.kf_no %}<a class="text-muted" target="_blank"
+                    href="https://order.kongfz.com/order-views/management/buyer/detail/{{ h.kf_no }}">{{ h.kf_no }}</a> | {% endif %}{{ h.title }}
+                {% if h.amount is not none %}| ¥{{ '%.2f'|format(h.amount) }}{% endif %}
+                {% if not h.name_match %}
+                <span class="badge text-bg-warning">姓名不一致：{{ h.name }}</span>
+                {% endif %}
+            </small>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+        </div>
+        {# 手动标记开关：脚本/监控漏报时自己标一下，再点取消；AJAX 免刷新 #}
+        {% if o.status == 'pending' %}
+        <form method="post" action="{{ url_for('orders.toggle_unpaid', oid=o.id) }}"
+              class="d-inline" onsubmit="toggleUnpaid(this, {{ o.id }}); return false">
+            <input type="hidden" name="status" value="{{ status }}">
+            <button class="btn btn-sm mt-1 {{ 'btn-info' if manual_marked else 'btn-outline-secondary' }}">
+                {{ '已下单·取消标记' if manual_marked else '标记已下单' }}</button>
+        </form>
+        {% endif %}
+        {# 收货人一致的未绑孔夫子单 → 勾选绑定（套装拆单/书名对不上时用） #}
+        {% set cands = cands_map.get(o.id) %}
+        {% if cands %}
+        <form method="post" action="{{ url_for('orders.bind_picked', oid=o.id) }}"
+              class="border border-warning rounded p-1 mt-1 bg-warning-subtle">
+            <input type="hidden" name="status" value="{{ status }}">
+            <small class="text-warning-emphasis d-block mb-1">
+                收货人一致的孔夫子单（勾选绑定）：</small>
+            {% for c in cands %}
+            <div class="d-flex align-items-center small {{ 'text-warning' if not c.name_match }}">
+                <label class="mb-0 me-1">
+                    <input type="checkbox" name="nos" value="{{ c.kongfz_order_no }}">
+                </label>
+                {# 点文字跳孔夫子订单详情页核对书名/收货人，别勾错单 #}
+                <a href="https://order.kongfz.com/order-views/management/buyer/detail/{{ c.kongfz_order_no }}"
+                   target="_blank" class="{{ 'text-warning' if not c.name_match }}"
+                   title="{{ c.recv_name }} {{ c.recv_phone }} {{ c.recv_addr }}">
+                    {{ c.kongfz_order_no }} | {{ c.title }} | ¥{{ c.total }}</a>
+                {% if not c.name_match %}
+                <span class="badge text-bg-warning ms-1">姓名不一致：{{ c.recv_name }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <button class="btn btn-sm btn-warning mt-1">绑定所选</button>
+        </form>
+        {% endif %}
+        {% if o.status == 'purchasing' %}
+        <form method="post" action="{{ url_for('orders.unbind', oid=o.id) }}" class="mt-1"
+              onsubmit="return confirm('取消绑定？孔夫子单号和成本会被清除，订单回到待采购');">
+            <input type="hidden" name="status" value="{{ status }}">
+            <button class="btn btn-sm btn-outline-danger">取消绑定</button>
+        </form>
+        {% endif %}
+        {% elif o.status == 'shipped' %}
+            <small class="text-muted">已回填闲鱼</small>
+        {% elif o.status == 'refunding' %}
+            <small class="text-muted">去闲管家处理退款</small>
+        {% elif o.status == 'closed' %}
+            <small class="text-muted">买家未付款，交易关闭</small>
+        {% elif o.status == 'refunded' %}
+            <small class="text-muted">退款已完成</small>
+        {% endif %}
+    </td>
+</tr>
+{% else %}
+<tr><td colspan="9" class="text-center text-muted py-5">
+    暂无订单。{% if demo_mode %}演示数据未生成？{% endif %}点右上角「同步订单」从闲管家拉取。
+</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+{# 底部分页条：保留 status/q/size/sort 全部筛选参数 #}
+{% if pages > 1 %}
+<div class="d-flex justify-content-between align-items-center mt-2 px-1">
+    <small class="text-muted">共 {{ total }} 条 · 第 {{ page }}/{{ pages }} 页</small>
+    <div class="btn-group btn-group-sm">
+        {% macro pbtn(n, label) -%}
+        <a class="btn {{ 'btn-primary' if n==page else 'btn-outline-secondary' }} {{ 'disabled' if n<1 or n>pages }}"
+           href="{{ url_for('orders.index', status=status, q=keyword, page=n, size=size, sort=sort) }}">{{ label }}</a>
+        {%- endmacro %}
+        {{ pbtn(page-1, '‹') }}
+        {% for n in range(1, pages+1) %}
+            {% if n==1 or n==pages or (n-page)|abs<=2 %}{{ pbtn(n, n) }}
+            {% elif (n-page)|abs==3 %}<span class="btn btn-outline-secondary disabled">…</span>{% endif %}
+        {% endfor %}
+        {{ pbtn(page+1, '›') }}
+    </div>
+</div>
+{% endif %}
+<script>
+// 标记已下单：AJAX 免刷新切换；失败时降级成普通表单提交
+async function toggleUnpaid(form, oid) {
+    try {
+        const fd = new FormData(form);
+        fd.append('ajax', '1');
+        const r = await fetch(form.action, {method: 'POST', body: fd});
+        const d = await r.json();
+        if (!d.ok) { form.submit(); return false; }
+        const btn = form.querySelector('button');
+        btn.classList.toggle('btn-info', d.on);
+        btn.classList.toggle('btn-outline-secondary', !d.on);
+        btn.textContent = d.on ? '已下单·取消标记' : '标记已下单';
+        document.getElementById('hints-' + oid).innerHTML = hintHtml(d.hints);
+    } catch (e) {
+        form.submit();   // JS 出问题就退化成普通提交，功能不受影响
+    }
+    return false;
+}
+
+function esc(s) {
+    return String(s || '').replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function hintHtml(hints) {
+    if (!hints || !hints.length) return '';
+    const rows = hints.map(h => {
+        if (h.manual)
+            return '<small class="d-block text-info">已下单（手动标记）</small>';
+        const amt = (h.amount != null) ? ' | ¥' + Number(h.amount).toFixed(2) : '';
+        const warn = h.name_match ? ''
+            : ` <span class="badge text-bg-warning">姓名不一致：${esc(h.name)}</span>`;
+        const no = h.kf_no
+            ? `<a class="text-muted" target="_blank" href="https://order.kongfz.com/order-views/management/buyer/detail/${esc(h.kf_no)}">${esc(h.kf_no)}</a> | `
+            : '';
+        return `<small class="d-block text-muted" title="${esc(h.name)}">`
+            + no + esc(h.title) + amt + warn + '</small>';
+    }).join('');
+    return '<div class="border rounded p-1 mt-1 bg-light">'
+        + '<small class="text-muted d-block">孔夫子已下单待付款：</small>' + rows + '</div>';
+}
+
+// 点找货源/去货源：后台设为孔夫子填单目标（油猴在下单页一键填收货地址），
+// 同时把收货信息复制到剪贴板兜底。
+function prepareSource(oid) {
+    {% if cloud_mode %}
+    return; // 云端由 source-immediate.js 并行同步地址，不设置旧油猴目标。
+    {% endif %}
+    try { navigator.sendBeacon('/orders/' + oid + '/prepare_source'); } catch(e) {}
+}
+
+{% if not cloud_mode %}
+// 填单：没绑货源链接先要链接，然后后台拉起自动化浏览器填收货地址
+async function fillCheckout(oid, hasUrl) {
+    let url = '';
+    if (!hasUrl) {
+        url = prompt('贴入你选好的孔夫子商品页链接（book.kongfz.com/...）：');
+        if (!url) return;
+        if (!url.includes('book.kongfz.com')) { alert('这不是孔夫子商品页链接'); return; }
+    }
+    const fd = new FormData();
+    if (url) fd.append('kongfz_url', url);
+    const r = await fetch('/orders/' + oid + '/fill_checkout', {method: 'POST', body: fd});
+    const d = await r.json();
+    {% if cloud_mode %}
+    if (d.ok) window.open('/browser/vnc.html?autoconnect=1&resize=scale&path=/browser/websockify','_blank','noopener');
+    {% endif %}
+    alert(d.ok ? '下单页正在打开，请在弹出的浏览器窗口里核对地址后手动付款'
+               : ('填单失败：' + (d.error || '')));
+}
+
+{% endif %}
+</script>
+{% endblock %}
+{% block scripts %}
+{% if cloud_mode %}<script src="{{ url_for('static', filename='source-immediate.js', v='verified-20261017') }}"></script>{% endif %}
+{% endblock %}

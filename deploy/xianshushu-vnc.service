@@ -1,0 +1,21 @@
+[Unit]
+Description=Xianshushu local-only browser access
+After=xianshushu-display.service
+Requires=xianshushu-display.service
+JoinsNamespaceOf=xianshushu-display.service
+
+[Service]
+User=www-data
+Group=www-data
+Environment=DISPLAY=:99
+Environment=XAUTHORITY=/srv/xianshushu/live-data/Xauthority
+ExecStart=/usr/bin/x11vnc -display :99 -auth /srv/xianshushu/live-data/Xauthority -localhost -forever -shared -nopw -rfbport 5900 -noxdamage
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

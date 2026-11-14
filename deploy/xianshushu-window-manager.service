@@ -1,0 +1,23 @@
+[Unit]
+Description=Xianshushu browser window controls
+After=xianshushu-display.service
+Requires=xianshushu-display.service
+JoinsNamespaceOf=xianshushu-display.service
+
+[Service]
+User=www-data
+Group=www-data
+Environment=DISPLAY=:99
+Environment=XAUTHORITY=/srv/xianshushu/live-data/Xauthority
+Environment=HOME=/srv/xianshushu/live-data
+ExecStart=/usr/bin/openbox --sm-disable
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/xianshushu/live-data /tmp
+
+[Install]
+WantedBy=multi-user.target

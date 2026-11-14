@@ -1,0 +1,635 @@
+{% extends "base.html" %}
+{% block title %}选品上架 - 闲书书{% endblock %}
+{% block content %}
+<div class="topbar"><strong>选品上架</strong>
+    <span class="text-muted">孔夫子搜书 → 定价 → 选模板 → 上架闲鱼</span>
+</div>
+
+<div class="card p-3 mb-3">
+    <div class="d-flex gap-2">
+        <input id="kw" class="form-control" style="max-width:360px" placeholder="书名 / ISBN，回车搜索">
+        <button id="btn-search" class="btn btn-primary"><i class="bi bi-search"></i> 搜索</button>
+        <span id="search-tip" class="text-muted align-self-center"></span>
+    </div>
+</div>
+
+<div id="result-wrap" class="card p-3 mb-3 d-none">
+    <h6 class="mb-3">搜索结果（孔夫子图书条目，一条一个版本）</h6>
+    <div id="results" class="row g-3"></div>
+</div>
+
+<div id="pool-wrap" class="card p-3 mb-3 d-none">
+    <div class="d-flex align-items-center mb-2">
+        <h6 class="mb-0">图池 <span id="pool-count" class="text-muted small"></span></h6>
+        <span id="collect-tip" class="text-danger small ms-3"></span>
+        <a id="xhs-link" href="#" target="_blank" class="btn btn-sm btn-outline-danger ms-auto d-none">去小红书找图</a>
+        <a id="kongfz-link" href="#" target="_blank" class="btn btn-sm btn-outline-primary ms-2 d-none">去孔夫子找图</a>
+        <button id="btn-reload-pool" class="btn btn-sm btn-outline-secondary ms-2">刷新显示</button>
+        <button id="btn-refresh-pool" class="btn btn-sm btn-outline-secondary ms-2">换一批店抓图</button>
+    </div>
+    <div class="small text-muted mb-2">提示脚本版本过旧或没有收图按钮时，
+        <a href="{{ url_for('products.userscript', fname='xhs_collect.user.js') }}" target="_blank">更新收图工具</a>，再从当前图池重新打开找图网站。</div>
+    <div class="small text-muted mb-2">孔夫子图片上架时自动裁剪水印，可先点「裁剪水印」检查书本是否完整；不满意可还原。</div>
+    <div id="pool-box"></div>
+</div>
+
+<div id="lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;align-items:center;justify-content:center">
+    <img id="lb-img" style="max-width:86vw;max-height:84vh;object-fit:contain;border-radius:4px" referrerpolicy="no-referrer">
+    <button id="lb-prev" class="btn btn-outline-light" style="position:absolute;left:2vw;top:50%;font-size:26px">‹</button>
+    <button id="lb-next" class="btn btn-outline-light" style="position:absolute;right:2vw;top:50%;font-size:26px">›</button>
+    <div style="position:absolute;top:16px;right:16px" class="d-flex gap-2">
+        <button id="lb-sel" class="btn btn-success btn-sm"></button>
+        <button id="lb-dw" class="btn btn-warning btn-sm">裁剪水印</button>
+        <button id="lb-del" class="btn btn-danger btn-sm">删除</button>
+        <button id="lb-close" class="btn btn-light btn-sm">关闭</button>
+    </div>
+    <div id="lb-info" class="text-white-50 small" style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%)"></div>
+</div>
+
+<div id="form-wrap" class="card p-3 mb-3 d-none">
+    <h6>上架表单</h6>
+    <form id="publish-form" method="post" action="{{ url_for('products.save') }}" class="row g-2 mt-1">
+        <input type="hidden" name="image_selection_explicit" value="1">
+        <input type="hidden" name="ordered_image_ids" id="f_image_order" value="[]">
+        <input type="hidden" name="submission_token" value="{{ submission_token }}">
+        <input type="hidden" name="book_title" id="f_title">
+        <input type="hidden" name="author" id="f_author">
+        <input type="hidden" name="publisher" id="f_publisher">
+        <input type="hidden" name="pub_year" id="f_year">
+        <input type="hidden" name="isbn" id="f_isbn">
+        <input type="hidden" name="kongfz_url" id="f_url">
+        <input type="hidden" name="kongfz_price" id="f_cost">
+        <input type="hidden" name="image_url" id="f_img">
+        <div class="col-md-4">
+            <label class="form-label">选中图书</label>
+            <div id="f_show" class="border rounded p-2 bg-light small"></div>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">售价(¥)</label>
+            <input class="form-control" name="sale_price" required placeholder="如 29.90">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">标题模板</label>
+            <select class="form-select" name="title_template_id">
+                {% for t in tpl_title %}<option value="{{ t.id }}" data-title-content="{{ t.content }}">{{ t.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">文案模板</label>
+            <select class="form-select" name="desc_template_id">
+                {% for t in tpl_desc %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">闲鱼号</label>
+            <select class="form-select" name="seller_id">
+                <option value="">默认</option>
+                {% for a in accounts %}<option value="{{ a.seller_id }}">{{ a.shop_name or a.seller_id }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-12 mt-3">
+            <label class="form-label mb-1">发布图片与顺序</label>
+            <div id="f_image_status" class="small text-muted mb-2"></div>
+            <div id="f_image_preview" class="d-flex gap-2 flex-wrap" role="list" aria-label="发布图片顺序"></div>
+        </div>
+        <div class="col-12 mt-3">
+            <button class="btn btn-outline-secondary" name="action" value="draft">存草稿</button>
+            <button class="btn btn-primary" name="action" value="publish">
+                <i class="bi bi-cloud-upload"></i> 确认上架</button>
+        </div>
+    </form>
+</div>
+
+<div class="card p-3">
+    <div class="d-flex align-items-center flex-wrap gap-2">
+        <h6 class="mb-0">本地选品（{{ products|length }}）</h6>
+        <form class="ms-auto" method="post" action="{{ url_for('products.sync_products') }}">
+            <button class="btn btn-sm btn-outline-primary" type="submit">
+                <i class="bi bi-cloud-download"></i> 同步闲鱼在售商品</button>
+        </form>
+        <form class="ms-2" method="post" action="{{ url_for('products.down_non_books') }}"
+              onsubmit="return confirm('下架所有无书目信息的在售商品？这会真实影响闲鱼在售状态');">
+            <button class="btn btn-sm btn-outline-danger" type="submit">下架非图书</button>
+        </form>
+    </div>
+    <table class="table table-sm align-middle mt-2">
+        <thead class="table-light"><tr>
+            <th>书名</th><th>店铺</th><th>作者</th><th>出版社</th><th class="text-end">成本</th>
+            <th class="text-end">售价</th><th>货源</th><th>状态</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for p in products %}
+        <tr>
+            <td>{{ p.book_title }}</td>
+            <td class="text-nowrap">
+                {% if p.seller_id %}
+                    {% for sid in p.seller_id.split(',') %}
+                    <span class="badge text-bg-{{ shop_color.get(sid, 'secondary') }}">{{ shop_map.get(sid, sid) }}</span>
+                    {% endfor %}
+                {% else %}<span class="badge text-bg-light border text-muted">未归属</span>{% endif %}
+            </td>
+            <td>{{ p.author }}</td><td>{{ p.publisher }}</td>
+            <td class="text-end">{% if p.kongfz_price %}¥{{ '%.2f'|format(p.kongfz_price) }}{% else %}-{% endif %}</td>
+            <td class="text-end">¥{{ '%.2f'|format(p.sale_price) }}</td>
+            <td>{% if p.kongfz_url %}<a href="{{ p.kongfz_url }}" target="_blank">孔夫子链接</a>{% else %}-{% endif %}</td>
+            <td>{% set sm={'draft':'草稿','listed':'在售','sold':'已售','out_of_stock':'已下架'} %}
+                <span class="badge text-bg-{{ 'success' if p.status=='listed' else 'secondary' }}">{{ sm.get(p.status,p.status) }}</span></td>
+            <td class="text-end">
+                {% if p.status == 'listed' %}
+                <form method="post" action="{{ url_for('products.down', pid=p.id) }}" class="d-inline"
+                      onsubmit="return confirm('确定下架 {{ p.book_title }} ?')">
+                    <button class="btn btn-sm btn-outline-danger">下架</button>
+                </form>
+                {% elif p.status == 'draft' %}
+                <button class="btn btn-sm btn-primary" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#pub-{{ p.id }}">
+                    上架</button>
+                {% endif %}
+            </td>
+        </tr>
+        {% if p.status == 'draft' %}
+        <tr class="collapse" id="pub-{{ p.id }}">
+            <td colspan="9" class="bg-light">
+                <form method="post" action="{{ url_for('products.publish_to', pid=p.id) }}" class="row g-2 align-items-end" data-title-book="{{ dict(p)|tojson|forceescape }}">
+                    <input type="hidden" name="back" value="publish">
+                    <div class="col-md-2">
+                        <label class="form-label small mb-0">挂到店铺</label>
+                        <select class="form-select form-select-sm" name="seller_id" required>
+                            {% for a in accounts %}<option value="{{ a.seller_id }}">{{ a.shop_name or a.seller_id }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-0">标题模板</label>
+                        <select class="form-select form-select-sm" name="title_template_id">
+                            {% for t in tpl_title %}<option value="{{ t.id }}" data-title-content="{{ t.content }}" {{ 'selected' if t.id==p.title_template_id }}>{{ t.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-0">文案模板</label>
+                        <select class="form-select form-select-sm" name="desc_template_id">
+                            {% for t in tpl_desc %}<option value="{{ t.id }}" {{ 'selected' if t.id==p.desc_template_id }}>{{ t.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label small mb-0">售价(¥)</label>
+                        <input class="form-control form-control-sm" name="sale_price" value="{{ p.sale_price }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-0">图片（勾选）</label>
+                        <div class="d-flex gap-1 flex-wrap border rounded p-1 bg-white">
+                            {% for im in pools.get(p.id, []) %}
+                            <label class="mb-0" title="{{ im.source }}">
+                                <input type="checkbox" name="img_ids" value="{{ im.id }}" {{ 'checked' if im.selected }} class="d-none imgc">
+                                <img src="{{ im.final_url or im.image_url }}" referrerpolicy="no-referrer"
+                                     class="rounded border imgpick {{ 'border-primary border-2' if im.selected }}" style="width:44px;height:44px;object-fit:cover;cursor:pointer">
+                            </label>
+                            {% else %}<span class="text-muted small">图池无图，用封面/无图上架</span>{% endfor %}
+                        </div>
+                    </div>
+                    <div class="col-md-1">
+                        <button class="btn btn-sm btn-primary"><i class="bi bi-cloud-upload"></i> 上架</button>
+                    </div>
+                </form>
+            </td>
+        </tr>
+        {% endif %}
+        {% else %}<tr><td colspan="7" class="text-muted text-center py-4">暂无选品</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='publish-image-order.js') }}"></script>
+<script>
+const publishImageOrder = new PublishImageOrder(document.getElementById('f_image_preview'),
+    document.getElementById('f_image_order'), document.getElementById('f_image_status'));
+let imagePreviewRequest = 0;
+async function refreshPublishImages() {
+    const entry = document.getElementById('f_url').value;
+    const requestId = ++imagePreviewRequest;
+    publishImageOrder.setBook(entry, document.getElementById('f_img').value);
+    try {
+        const response = await fetch('/api/images/pool?entry_url=' + encodeURIComponent(entry), {cache:'no-store'});
+        const data = await response.json();
+        if (requestId !== imagePreviewRequest || document.getElementById('f_url').value !== entry) return;
+        if (!response.ok || !data.ok) throw new Error(data.error || '图片读取失败');
+        publishImageOrder.load(data.groups.flatMap(group => group.images).filter(image => image.selected));
+    } catch (error) {
+        if (requestId === imagePreviewRequest) {
+            publishImageOrder.ready = false;
+            publishImageOrder.status.textContent = '图片加载失败，请点图池的刷新显示后重试：' + error.message;
+        }
+    }
+}
+document.getElementById('publish-form').addEventListener('submit', event => {
+    if (!publishImageOrder.ready) {
+        event.preventDefault(); alert('请等待图片加载完成，失败时请刷新图池后重试');
+    } else if (event.submitter?.value === 'publish' && !publishImageOrder.images.length && !publishImageOrder.cover) {
+        event.preventDefault(); alert('请先选择至少一张发布图片');
+    }
+});
+// 草稿上架表单：点缩略图切换勾选
+document.querySelectorAll('input.imgc').forEach(cb => {
+    cb.addEventListener('change', () => {
+        const img = cb.closest('label').querySelector('.imgpick');
+        img.classList.toggle('border-primary', cb.checked);
+        img.classList.toggle('border-2', cb.checked);
+    });
+});
+const kw = document.getElementById('kw');
+const tip = document.getElementById('search-tip');
+document.getElementById('btn-search').onclick = doSearch;
+kw.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+// 热书榜"去找货"跳入：?kw=书名 自动搜索
+const _kw = new URLSearchParams(location.search).get('kw');
+if (_kw) { kw.value = _kw; doSearch(); }
+
+async function doSearch() {
+    const key = kw.value.trim();
+    if (!key) return;
+    tip.textContent = '搜索中（孔夫子页面加载需要几秒）…';
+    const wrap = document.getElementById('result-wrap');
+    const box = document.getElementById('results');
+    box.innerHTML = ''; wrap.classList.remove('d-none');
+    try {
+        const r = await fetch('{{ url_for("products.search") }}?key=' + encodeURIComponent(key));
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+            tip.textContent = '搜索失败：' + (d.error || '搜索服务暂时不可用，请稍后重试');
+            return;
+        }
+        if (!Array.isArray(d.items)) {
+            tip.textContent = '搜索失败：服务返回的结果格式异常，请重试';
+            return;
+        }
+        tip.textContent = d.items.length ? `找到 ${d.items.length} 条（按孔夫子条目销量排序）` : '没有找到对应版本，可尝试缩短书名或搜索 ISBN';
+        d.items.forEach((b, i) => box.appendChild(renderCard(b, i)));
+    } catch (e) { tip.textContent = '搜索失败：' + e; }
+}
+
+function renderCard(b, i) {
+    const col = document.createElement('div');
+    col.className = 'col-md-3';
+    col.innerHTML = `
+      <div class="border rounded p-2 h-100 d-flex flex-column">
+        ${b.image_url ? `<img src="${b.image_url}" class="w-100 rounded mb-2" style="height:150px;object-fit:cover" referrerpolicy="no-referrer">` : ''}
+        <div class="fw-semibold small">${b.book_title}</div>
+        <div class="text-muted small">${b.author || ''} ${b.publisher ? '· '+b.publisher : ''}</div>
+        <div class="text-muted small">${b.pub_year || ''} ${b.binding || ''} ${b.stock_text ? '· '+b.stock_text : ''}</div>
+        <div class="mt-auto d-flex justify-content-between align-items-center pt-2">
+          <span class="text-danger">${b.kongfz_price ? '¥'+b.kongfz_price : ''}</span>
+          <span class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-primary btn-find" title="抓该版本卖家的实拍图">找图</button>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-collect" title="开启收图模式：刷小红书点「收图」自动进这里">收图</button>
+            <button type="button" class="btn btn-sm btn-primary btn-pick">选用</button>
+          </span>
+        </div>
+      </div>`;
+    col.querySelector('.btn-find').onclick = e => fetchImages(b, e.target);
+    col.querySelector('.btn-collect').onclick = e => toggleCollect(b, e.target);
+    col.querySelector('.btn-pick').onclick = () => pick(b);
+    return col;
+}
+
+let curPoolEntry = '';
+let curPoolTitle = '';
+const xhsLink = document.getElementById('xhs-link');
+const kongfzLink = document.getElementById('kongfz-link');
+function kongfzCollectUrl(kw, entryUrl) {
+    const url = new URL(entryUrl);
+    if (!['item.kongfz.com', 'book.kongfz.com'].includes(url.hostname)) throw new Error('孔夫子条目链接无效');
+    url.protocol = 'https:';
+    url.hash = 'xs_collect&entry_url=' + encodeURIComponent(entryUrl) + '&book_title=' + encodeURIComponent(kw || '');
+    return url.href;
+}
+function xhsSearchUrl(kw, entryUrl) {
+    // 目标随链接进入小红书标签页，不再让脚本借用全局旧目标。
+    return 'https://www.xiaohongshu.com/search_result?keyword='
+        + encodeURIComponent(kw || '') + '#xs_collect&entry_url='
+        + encodeURIComponent(entryUrl || '') + '&book_title=' + encodeURIComponent(kw || '');
+}
+function setPoolContext(b) {   // 记住当前图池属于哪本书，更新小红书跳转链接
+    curPoolEntry = b.kongfz_url || '';
+    curPoolTitle = b.book_title || '';
+    collectTip.textContent = curPoolTitle ? `当前图池：《${curPoolTitle}》` : '';
+    if (curPoolTitle) {
+        xhsLink.href = xhsSearchUrl(curPoolTitle, curPoolEntry);
+        xhsLink.classList.remove('d-none');
+        try {
+            kongfzLink.href = kongfzCollectUrl(curPoolTitle, curPoolEntry);
+            kongfzLink.classList.remove('d-none');
+        } catch { kongfzLink.classList.add('d-none'); }
+    }
+}
+const poolWrap = document.getElementById('pool-wrap');
+const poolBox = document.getElementById('pool-box');
+const poolCount = document.getElementById('pool-count');
+const collectTip = document.getElementById('collect-tip');
+
+async function openXhsCollect(entryUrl, title, source = 'xhs') {
+    if (!entryUrl) { alert('请先选择一本书的图池'); return; }
+    const popup = window.open('about:blank', '_blank');
+    try {
+        const response = await fetch('/api/images/collect_target', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({entry_url: entryUrl})});
+        const data = await response.json();
+        if (!response.ok || !data.ok || data.target !== entryUrl)
+            throw new Error(data.error || '收图目标设置失败');
+        if (curPoolEntry === entryUrl)
+            collectTip.textContent = `收图目标：《${title || data.title}》，${source === 'kongfz' ? '孔夫子卖家详情页' : '小红书笔记'}内点「收图」`;
+        const url = source === 'kongfz' ? kongfzCollectUrl(title || data.title, entryUrl) : xhsSearchUrl(title || data.title, entryUrl);
+        if (popup) popup.location.href = url;
+        else { (source === 'kongfz' ? kongfzLink : xhsLink).href = url; alert('浏览器拦截了新窗口，请再次点击相应的找图按钮'); }
+    } catch (error) {
+        if (popup) popup.close();
+        alert('开启收图失败：' + error.message);
+    }
+}
+xhsLink.onclick = event => {
+    event.preventDefault();
+    openXhsCollect(curPoolEntry, curPoolTitle);
+};
+kongfzLink.onclick = event => {
+    event.preventDefault();
+    openXhsCollect(curPoolEntry, curPoolTitle, 'kongfz');
+};
+
+async function fetchImages(b, btn) {
+    const entryUrl = b.kongfz_url;
+    if (!entryUrl) return;
+    setPoolContext(b);
+    btn.disabled = true; btn.textContent = '抓图中…';
+    poolWrap.classList.remove('d-none');
+    poolBox.innerHTML = '<div class="text-muted py-3">正在开 Edge 抓卖家实拍图（约 30~60 秒），可以先做别的…</div>';
+    try {
+        const r = await fetch('/api/images/fetch', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({entry_url: entryUrl})});
+        const d = await r.json();
+        if (!d.ok) { poolBox.innerHTML = `<div class="text-danger py-2">抓图失败：${d.error}</div>`; return; }
+        renderPool(d.groups, entryUrl);
+    } catch (e) {
+        poolBox.innerHTML = `<div class="text-danger py-2">抓图失败：${e}</div>`;
+    } finally {
+        btn.disabled = false; btn.textContent = '找图';
+    }
+}
+
+document.getElementById('btn-reload-pool').onclick = async () => {
+    if (!curPoolEntry) return;
+    const entryUrl = curPoolEntry;
+    const btn = document.getElementById('btn-reload-pool');
+    btn.disabled = true;
+    try {
+        const r = await fetch('/api/images/pool?entry_url=' + encodeURIComponent(entryUrl), {cache: 'no-store'});
+        const d = await r.json();
+        if (!r.ok || !d.ok) throw new Error(d.error || '图池读取失败');
+        if (curPoolEntry !== entryUrl) return;
+        renderPool(d.groups, entryUrl);
+        const n = d.groups.filter(g => g.source === 'xhs').reduce((sum, g) => sum + g.images.length, 0);
+        const k = d.groups.filter(g => g.source === 'kongfz_manual').reduce((sum, g) => sum + g.images.length, 0);
+        collectTip.textContent = n || k ? `手动收图：小红书 ${n} 张，孔夫子 ${k} 张`
+            : '当前书籍还没有小红书图片，请从这里重新打开小红书，并在笔记内点「收图」';
+    } catch (error) {
+        if (curPoolEntry === entryUrl) collectTip.textContent = '刷新失败：' + error.message;
+    } finally { btn.disabled = false; }
+};
+
+document.getElementById('btn-refresh-pool').onclick = async () => {
+    if (!curPoolEntry) return;
+    const entryUrl = curPoolEntry;
+    const btn = document.getElementById('btn-refresh-pool');
+    btn.disabled = true; btn.textContent = '抓下一批店…';
+    try {
+        const r = await fetch('/api/images/fetch', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({entry_url: entryUrl})});
+        const d = await r.json();
+        if (!d.ok) { alert('抓图失败：' + d.error); return; }
+        renderPool(d.groups, entryUrl);
+        if (!d.shops) alert('这个条目页能抓的店都抓完了（或新店没图）');
+    } finally {
+        btn.disabled = false; btn.textContent = '换一批店抓图';
+    }
+};
+
+function renderPool(groups, entryUrl) {
+    if (entryUrl !== curPoolEntry) return;
+    poolBox.innerHTML = '';
+    poolFlat = [];
+    if (!groups.length) { poolBox.innerHTML = '<div class="text-muted py-2">图池为空</div>'; updatePoolCount(0); return; }
+    let total = 0;
+    groups.forEach(g => {
+        total += g.images.length;
+        const sec = document.createElement('div');
+        sec.className = 'mb-3';
+        sec.innerHTML = `<div class="d-flex align-items-center mb-1 small">
+            <span class="badge ${g.source === 'xhs' ? 'text-bg-danger' : 'text-bg-secondary'}">${g.source === 'xhs' ? '小红书' : g.source === 'kongfz_manual' ? '孔夫子手动' : '孔夫子'}</span>
+            <b class="ms-1">${g.shop_name || '未名'}</b>
+            ${g.shop_price ? `<span class="text-muted ms-2">¥${g.shop_price}</span>` : ''}
+            ${g.source_url ? `<a class="ms-2" href="${g.source_url}" target="_blank">原页</a>` : ''}
+            <span class="text-muted ms-2">${g.images.length} 张</span>
+          </div><div class="d-flex flex-wrap gap-2"></div>`;
+        const row = sec.querySelector('.d-flex.flex-wrap');
+        g.images.forEach(im => {
+            const tile = imgTile(im, entryUrl);
+            im._tile = tile;
+            im._shop = g.shop_name;
+            poolFlat.push(im);
+            row.appendChild(tile);
+        });
+        poolBox.appendChild(sec);
+    });
+    updatePoolCount(0);
+}
+
+function updatePoolCount(delta) {
+    const n = poolBox.querySelectorAll('.sel-badge.text-bg-success').length;
+    poolCount.textContent = `已选 ${n} 张`;
+    if (document.getElementById('f_url').value === curPoolEntry &&
+        !document.getElementById('form-wrap').classList.contains('d-none')) refreshPublishImages();
+}
+
+function imgTile(im, entryUrl) {
+    const d = document.createElement('div');
+    d.className = 'position-relative border rounded overflow-hidden';
+    d.style.cssText = 'width:120px;height:120px;';
+    const src = im.final_url || im.image_url;
+    d.innerHTML = `<img src="${src}" class="w-100 h-100" style="object-fit:cover;cursor:pointer" referrerpolicy="no-referrer">
+        <span class="sel-badge position-absolute top-0 end-0 m-1 badge ${im.selected ? 'text-bg-success' : 'text-bg-secondary'}" style="cursor:pointer">${im.selected ? '✓' : '选'}</span>
+        <div class="position-absolute bottom-0 start-0 w-100 d-flex justify-content-between" style="background:rgba(0,0,0,.4)">
+          <button class="btn btn-sm p-0 px-1 text-white btn-dw" style="font-size:11px">${im.processed ? '还原' : '裁剪水印'}</button>
+          <button class="btn btn-sm p-0 px-1 text-white btn-del" style="font-size:11px">删</button>
+        </div>`;
+    const badge = d.querySelector('.sel-badge');
+    const toggle = async () => {
+        im.selected = !im.selected;
+        await fetch('/api/images/select', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: im.id, selected: im.selected})});
+        badge.className = 'sel-badge position-absolute top-0 end-0 m-1 badge ' + (im.selected ? 'text-bg-success' : 'text-bg-secondary');
+        badge.textContent = im.selected ? '✓' : '选';
+        updatePoolCount();
+    };
+    d.querySelector('img').onclick = () => openLightbox(im);
+    badge.onclick = toggle;
+    d.querySelector('.btn-dw').onclick = async e => {
+        const btn = e.target;
+        if (im.processed) {   // 已处理过 -> 还原
+            await fetch('/api/images/restore', {method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: im.id})});
+            im.final_url = `/pool_img/${im.id}?v=${Date.now()}`;
+            im.processed = false;
+            d.querySelector('img').src = im.final_url;
+            btn.textContent = '裁剪水印';
+            return;
+        }
+        btn.textContent = '处理中…'; btn.disabled = true;
+        try {
+            const r = await fetch('/api/images/dewatermark', {method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: im.id})});
+            const res = await r.json();
+            if (res.ok) {
+                im.final_url = res.url + '?v=' + Date.now();
+                im.processed = true;
+                d.querySelector('img').src = im.final_url;
+                btn.textContent = '还原';
+            } else { btn.textContent = '失败'; }
+        } catch (err) { btn.textContent = '失败'; }
+        btn.disabled = false;
+    };
+    d.querySelector('.btn-del').onclick = async () => {
+        await fetch(`/api/images/${im.id}`, {method: 'DELETE'});
+        d.remove();
+        updatePoolCount();
+    };
+    return d;
+}
+
+// ---------- 灯箱 ----------
+let poolFlat = [];
+let lbIm = null;
+const lb = document.getElementById('lightbox');
+
+function openLightbox(im) {
+    lbIm = im;
+    lb.style.display = 'flex';
+    renderLightbox();
+}
+
+function renderLightbox() {
+    const im = lbIm;
+    document.getElementById('lb-img').src = im.final_url || im.image_url;
+    document.getElementById('lb-sel').textContent = im.selected ? '已选 ✓ 取消' : '选中';
+    document.getElementById('lb-dw').textContent = im.processed ? '还原' : '裁剪水印';
+    document.getElementById('lb-info').textContent =
+        (im._shop || '') + '  ' + (poolFlat.indexOf(im) + 1) + ' / ' + poolFlat.length;
+}
+
+function closeLightbox() { lb.style.display = 'none'; lbIm = null; }
+
+document.getElementById('lb-close').onclick = closeLightbox;
+lb.onclick = e => { if (e.target === lb) closeLightbox(); };
+document.addEventListener('keydown', e => {
+    if (!lbIm) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') lbNav(-1);
+    if (e.key === 'ArrowRight') lbNav(1);
+});
+function lbNav(step) {
+    const i = poolFlat.indexOf(lbIm);
+    const n = (i + step + poolFlat.length) % poolFlat.length;
+    lbIm = poolFlat[n];
+    renderLightbox();
+}
+document.getElementById('lb-prev').onclick = () => lbNav(-1);
+document.getElementById('lb-next').onclick = () => lbNav(1);
+
+function syncTileBadge(im) {
+    if (!im._tile) return;
+    const badge = im._tile.querySelector('.sel-badge');
+    badge.className = 'sel-badge position-absolute top-0 end-0 m-1 badge ' + (im.selected ? 'text-bg-success' : 'text-bg-secondary');
+    badge.textContent = im.selected ? '✓' : '选';
+}
+
+document.getElementById('lb-sel').onclick = async () => {
+    lbIm.selected = !lbIm.selected;
+    await fetch('/api/images/select', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: lbIm.id, selected: lbIm.selected})});
+    syncTileBadge(lbIm);
+    updatePoolCount();
+    renderLightbox();
+};
+
+document.getElementById('lb-dw').onclick = async e => {
+    const btn = e.target;
+    if (lbIm.processed) {
+        await fetch('/api/images/restore', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: lbIm.id})});
+        lbIm.final_url = `/pool_img/${lbIm.id}?v=${Date.now()}`;
+        lbIm.processed = false;
+    } else {
+        btn.textContent = '处理中…'; btn.disabled = true;
+        try {
+            const r = await fetch('/api/images/dewatermark', {method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: lbIm.id})});
+            const res = await r.json();
+            if (res.ok) { lbIm.final_url = res.url + '?v=' + Date.now(); lbIm.processed = true; }
+            else btn.textContent = '失败';
+        } catch (err) { btn.textContent = '失败'; }
+        btn.disabled = false;
+    }
+    if (lbIm._tile) {
+        lbIm._tile.querySelector('img').src = lbIm.final_url || lbIm.image_url;
+        lbIm._tile.querySelector('.btn-dw').textContent = lbIm.processed ? '还原' : '裁剪水印';
+    }
+    renderLightbox();
+};
+
+document.getElementById('lb-del').onclick = async () => {
+    await fetch(`/api/images/${lbIm.id}`, {method: 'DELETE'});
+    const idx = poolFlat.indexOf(lbIm);
+    poolFlat.splice(idx, 1);
+    if (lbIm._tile) lbIm._tile.remove();
+    updatePoolCount();
+    if (poolFlat.length) { lbIm = poolFlat[idx % poolFlat.length]; renderLightbox(); }
+    else closeLightbox();
+};
+
+async function toggleCollect(b, btn) {
+    setPoolContext(b);
+    poolWrap.classList.remove('d-none');
+    openXhsCollect(b.kongfz_url, b.book_title);
+    document.getElementById('btn-reload-pool').click();
+}
+
+function pick(b) {
+    document.getElementById('form-wrap').classList.remove('d-none');
+    document.getElementById('f_title').value = b.book_title;
+    document.getElementById('f_author').value = b.author || '';
+    document.getElementById('f_publisher').value = b.publisher || '';
+    // 选用图书后同步展示最终提交标题。
+    setTimeout(updatePublishTitlePreviews, 0);
+    document.getElementById('f_year').value = b.pub_year || '';
+    document.getElementById('f_isbn').value = b.isbn || '';
+    document.getElementById('f_url').value = b.kongfz_url || '';
+    document.getElementById('f_cost').value = b.kongfz_price || '';
+    document.getElementById('f_img').value = b.image_url || '';
+    document.getElementById('f_show').innerHTML =
+        `<b>${b.book_title}</b><br>${b.author||''} / ${b.publisher||''}<br>` +
+        `<span class='text-danger'>成本 ¥${b.kongfz_price||'?'}</span> ` +
+        `<a href='${b.kongfz_url}' target='_blank'>孔夫子链接</a>`;
+    refreshPublishImages();
+    window.scrollTo({top: document.getElementById('form-wrap').offsetTop - 80, behavior: 'smooth'});
+}
+</script>
+<script src="{{ url_for('static', filename='publish-title-preview.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}店铺商品 - 闲书书{% endblock %}
+{% block content %}
+<div class="topbar"><strong>店铺商品</strong>
+    <span class="text-muted">各店货架盘点 · 挂到另一店可换模板/价格/图片</span>
+</div>
+
+{# 店铺切换 chips：概览=每店前15行，点店进单店翻页视图 #}
+<div class="d-flex gap-1 flex-wrap mb-3">
+    <a href="{{ url_for('products.shop_products') }}"
+       class="badge rounded-pill text-decoration-none {{ 'text-bg-dark' if not shop else 'text-bg-light border' }}">全部</a>
+    {% for a in accounts %}
+    <a href="{{ url_for('products.shop_products', shop=a.seller_id) }}"
+       class="badge rounded-pill text-decoration-none {{ 'text-bg-' ~ shop_color[a.seller_id] if shop==a.seller_id else 'text-bg-light border' }}">{{ a.shop_name or a.seller_id }} {{ full_sizes.get(a.seller_id,0) }}</a>
+    {% endfor %}
+</div>
+
+{% macro prod_row(p, sid) %}
+{# 单行：sid=当前所在店（决定下架/挂店的店参数） #}
+<tr>
+    <td>{{ p.book_title }}</td>
+    <td>{{ p.author or '-' }}</td>
+    <td class="text-end">¥{{ '%.2f'|format(p.sale_price or 0) }}</td>
+    <td>{% set sm={'draft':'草稿','listed':'在售','sold':'已售罄','out_of_stock':'已下架',
+        'created':'待继续上架','creating':'创建中','publishing':'上架中','publish_pending':'等待平台确认',
+        'uncertain_create':'创建结果待核对','uncertain_publish':'上架结果待核对',
+        'uncertain_down':'下架结果待核对','needs_verify':'历史记录待核对','failed':'创建失败'} %}
+        <span class="badge text-bg-{{ 'success' if p.status=='listed' else 'secondary' }}">{{ sm.get(p.status,p.status) }}</span>
+        {% if p.listing_error %}<div class="small text-danger" style="max-width:260px;white-space:normal">{{ p.listing_error }}</div>{% endif %}</td>
+    <td class="text-end text-nowrap">
+        {% if p.status == 'listed' %}
+        <form method="post" action="{{ url_for('products.down', pid=p.id) }}" class="d-inline"
+              onsubmit="return confirm('下架 {{ p.book_title }} {{ ('（仅从' ~ shop_map.get(sid,sid) ~ '）') if sid }}？')">
+            <input type="hidden" name="back" value="shop">
+            {% if sid %}<input type="hidden" name="seller_id" value="{{ sid }}">{% endif %}
+            <button class="btn btn-sm btn-outline-danger">下架{{ '该店' if sid }}</button>
+        </form>
+        {% endif %}
+        {% if sid and p.status in ('created','out_of_stock') %}
+        <form method="post" action="{{ url_for('products.publish_to', pid=p.id) }}" class="d-inline">
+            <input type="hidden" name="seller_id" value="{{ sid }}">
+            <button class="btn btn-sm btn-outline-primary">{{ '继续上架' if p.status=='created' else '重新上架' }}</button>
+        </form>
+        {% endif %}
+        {% set others = accounts|rejectattr('seller_id','in',(p.seller_id or '').split(','))|list %}
+        {% if others %}
+        <button class="btn btn-sm btn-outline-primary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#pub-{{ p.id }}-{{ sid or 'd' }}">
+            挂到{{ (others[0].shop_name or others[0].seller_id) if others|length==1 else '另一店' }}</button>
+        {% endif %}
+    </td>
+</tr>
+{% if others %}
+<tr class="collapse" id="pub-{{ p.id }}-{{ sid or 'd' }}">
+    <td colspan="5" class="bg-light">
+        <form method="post" action="{{ url_for('products.publish_to', pid=p.id) }}" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">挂到店铺</label>
+                <select class="form-select form-select-sm" name="seller_id" required>
+                    {% for a in others %}<option value="{{ a.seller_id }}">{{ a.shop_name or a.seller_id }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">标题模板</label>
+                <select class="form-select form-select-sm" name="title_template_id">
+                    {% for t in tpl_title %}<option value="{{ t.id }}" {{ 'selected' if t.id==p.title_template_id }}>{{ t.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">文案模板</label>
+                <select class="form-select form-select-sm" name="desc_template_id">
+                    {% for t in tpl_desc %}<option value="{{ t.id }}" {{ 'selected' if t.id==p.desc_template_id }}>{{ t.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-0">售价(¥)</label>
+                <input class="form-control form-control-sm" name="sale_price" value="{{ p.sale_price }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-0">图片（勾选，默认沿用当前选中）</label>
+                <div class="d-flex gap-1 flex-wrap border rounded p-1 bg-white">
+                    {% for im in pools.get(p.id, []) %}
+                    <label class="mb-0" title="{{ im.source }}">
+                        <input type="checkbox" name="img_ids" value="{{ im.id }}" {{ 'checked' if im.selected }} class="d-none imgc">
+                        <img src="{{ im.final_url or im.image_url }}" referrerpolicy="no-referrer"
+                             class="rounded border imgpick {{ 'border-primary border-2' if im.selected }}" style="width:44px;height:44px;object-fit:cover;cursor:pointer">
+                    </label>
+                    {% else %}<span class="text-muted small">图池无图，用封面/无图上架</span>{% endfor %}
+                </div>
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-sm btn-primary"><i class="bi bi-cloud-upload"></i> 上架</button>
+            </div>
+        </form>
+    </td>
+</tr>
+{% endif %}
+{% endmacro %}
+
+{% macro shop_card(title, items, sid, color) %}
+<div class="card p-3 mb-3">
+    <h6 class="mb-2">
+        <span class="badge text-bg-{{ color }} me-1">{{ title }}</span>
+        <span class="text-muted small">
+            {{ items|selectattr('status','equalto','listed')|list|length }} 在售
+            / {{ items|selectattr('status','equalto','out_of_stock')|list|length }} 已下架
+            / 共 {{ full_sizes.get(sid, items|length) }}</span>
+        {% if sid and not shop and full_sizes.get(sid,0) > items|length %}
+        <a class="small ms-2" href="{{ url_for('products.shop_products', shop=sid) }}">查看全部 {{ full_sizes[sid] }} 个 →</a>
+        {% endif %}
+    </h6>
+    <table class="table table-sm align-middle mb-0">
+        <thead class="table-light"><tr>
+            <th>书名</th><th>作者</th><th class="text-end">售价</th><th>状态</th><th class="text-end">操作</th>
+        </tr></thead>
+        <tbody>
+        {% for p in items %}{{ prod_row(p, sid) }}{% else %}
+        <tr><td colspan="5" class="text-muted text-center py-3">这个店还没有商品</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% if shop and total > page_size %}
+    <nav class="mt-2"><ul class="pagination pagination-sm justify-content-center mb-0">
+        {% set pages = (total // page_size) + (1 if total % page_size else 0) %}
+        {% for i in range(1, pages + 1) %}
+        <li class="page-item {{ 'active' if i==page }}">
+            <a class="page-link" href="{{ url_for('products.shop_products', shop=shop, page=i) }}">{{ i }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+    <div class="text-center text-muted small mt-1">共 {{ total }} 个 · 第 {{ page }}/{{ pages }} 页</div></nav>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% for a in accounts %}
+    {{ shop_card(a.shop_name or a.seller_id, groups.get(a.seller_id, []), a.seller_id, shop_color[a.seller_id]) }}
+{% endfor %}
+
+{% if groups.get('') %}
+    {{ shop_card('未归属店铺', groups[''], None, 'secondary') }}
+{% endif %}
+
+{% if drafts %}
+<div class="card p-3">
+    <h6 class="mb-2"><span class="badge text-bg-light border me-1">未上架草稿</span>
+        <span class="text-muted small">{{ drafts|length }} 个</span></h6>
+    <table class="table table-sm align-middle mb-0">
+        <thead class="table-light"><tr>
+            <th>书名</th><th>作者</th><th class="text-end">售价</th><th>状态</th><th class="text-end">操作</th>
+        </tr></thead>
+        <tbody>
+        {% for p in drafts %}{{ prod_row(p, None) }}{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 点缩略图切换勾选（label 原生触发 change），边框色表示选中
+document.querySelectorAll('input.imgc').forEach(cb => {
+    cb.addEventListener('change', () => {
+        const img = cb.closest('label').querySelector('.imgpick');
+        img.classList.toggle('border-primary', cb.checked);
+        img.classList.toggle('border-2', cb.checked);
+    });
+});
+</script>
+{% endblock %}

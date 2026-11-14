@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}闲书书{% endblock %}</title>
+    <link href="{{ url_for('static',filename='vendor/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static',filename='vendor/bootstrap-icons.css') }}" rel="stylesheet">
+    <style>
+        :root { --sidebar-w: 210px; }
+        body { background:#f5f6f8; font-size:14px; }
+        .sidebar { position:fixed; top:0; bottom:0; width:var(--sidebar-w);
+            background:#1f2430; color:#cfd3dc; padding:16px 0; overflow-y:auto; }
+        .sidebar .brand { color:#fff; font-weight:600; font-size:16px;
+            padding:0 20px 14px; border-bottom:1px solid #2c3242; }
+        .sidebar a { color:#cfd3dc; text-decoration:none; display:block;
+            padding:9px 20px; border-left:3px solid transparent; }
+        .sidebar a:hover { background:#2a3040; color:#fff; }
+        .sidebar a.active { background:#0d6efd; color:#fff; border-left-color:#9ec5fe; }
+        .sidebar .nav-sec { padding:14px 20px 4px; font-size:12px; color:#7d8598; }
+        .main { margin-left:var(--sidebar-w); padding:20px 24px 60px; }
+        .topbar { background:#fff; border-radius:8px; padding:12px 18px;
+            margin-bottom:18px; display:flex; align-items:center; gap:14px;
+            box-shadow:0 1px 2px rgba(0,0,0,.05); }
+        .card { border:none; border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,.05); }
+        .table { background:#fff; }
+        .status-badge { font-size:12px; }
+        .stat-num { font-size:22px; font-weight:600; }
+        .flash-wrap { margin-left:var(--sidebar-w); padding:14px 24px 0; }
+        .form-inline-sm .form-control, .form-inline-sm .form-select { font-size:13px; }
+    </style>
+</head>
+<body>
+<nav class="sidebar">
+    <div class="brand"><i class="bi bi-shop"></i> 闲书书</div>
+    <div class="nav-sec">订单</div>
+    <a href="{{ url_for('orders.index') }}" class="{{ 'active' if request.endpoint=='orders.index' }}">
+        <i class="bi bi-box-seam me-2"></i>订单管理</a>
+    <a href="{{ url_for('orders.index', status='refunding') }}">
+        <i class="bi bi-arrow-counterclockwise me-2"></i>退款订单</a>
+    <div class="nav-sec">商品</div>
+    <a href="{{ url_for('products.publish_page') }}" class="{{ 'active' if request.endpoint=='products.publish_page' }}">
+        <i class="bi bi-book me-2"></i>选品上架</a>
+    <a href="{{ url_for('products.shop_products') }}" class="{{ 'active' if request.endpoint=='products.shop_products' }}">
+        <i class="bi bi-shop-window me-2"></i>店铺商品</a>
+    <a href="{{ url_for('products.hotlist') }}" class="{{ 'active' if request.endpoint=='products.hotlist' }}">
+        <i class="bi bi-fire me-2"></i>热书榜</a>
+    <a href="{{ url_for('templates.index') }}" class="{{ 'active' if request.endpoint=='templates.index' }}">
+        <i class="bi bi-card-text me-2"></i>模板管理</a>
+    <div class="nav-sec">数据</div>
+    <a href="{{ url_for('reports.index') }}" class="{{ 'active' if request.endpoint=='reports.index' }}">
+        <i class="bi bi-bar-chart me-2"></i>利润报表</a>
+    <a href="{{ url_for('reports.customers') }}" class="{{ 'active' if request.endpoint=='reports.customers' }}">
+        <i class="bi bi-people me-2"></i>客户</a>
+    <div class="nav-sec">系统</div>
+    <a href="{{ url_for('settings.index') }}" class="{{ 'active' if request.endpoint=='settings.index' }}">
+        <i class="bi bi-gear me-2"></i>系统设置</a>
+    {% if cloud_mode %}<a href="/browser/vnc.html?autoconnect=1&amp;resize=scale&amp;path=/browser/websockify" target="_blank" rel="noopener"><i class="bi bi-window me-2"></i>孔夫子窗口</a>{% endif %}
+</nav>
+
+<div class="flash-wrap">
+    {% if kongfz_login_dead %}
+        <div class="alert alert-danger py-2 mt-2 mb-0">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>孔夫子登录态已失效</strong>——发货监控和「填单」暂停工作。
+            {% if cloud_mode %}请到系统设置启动登录窗口，完成验证后检查自动恢复。
+            {% else %}请运行 <code>scripts\kongfz_login.bat</code> 重新登录后自动恢复。{% endif %}
+        </div>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+            <div class="alert alert-{{ cat }} alert-dismissible fade show py-2 mt-2">
+                {{ msg }}<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endwith %}
+</div>
+
+<main class="main">
+    {% block content %}{% endblock %}
+</main>
+<script src="{{ url_for('static',filename='vendor/bootstrap.bundle.min.js') }}"></script>
+{% if cloud_mode %}<script src="{{ url_for('static',filename='cloud-security.js') }}" data-csrf="{{ csrf_token() }}"></script>{% endif %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

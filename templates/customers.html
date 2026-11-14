@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}客户 - 闲书书{% endblock %}
+{% block content %}
+<div class="topbar"><strong>客户</strong>
+    <span class="text-muted">共 {{ total }} 位买家 · 回头客 {{ repeats }} 位 ·
+        手机号只在下单窗口期可见，已自动沉淀到本地</span>
+</div>
+
+<div class="d-flex align-items-center gap-1 mb-2">
+    <a class="btn btn-sm {{ 'btn-primary' if only!='repeat' else 'btn-outline-primary' }}"
+       href="{{ url_for('reports.customers') }}">全部 {{ total }}</a>
+    <a class="btn btn-sm {{ 'btn-danger' if only=='repeat' else 'btn-outline-danger' }}"
+       href="{{ url_for('reports.customers', only='repeat') }}">回头客 {{ repeats }}</a>
+</div>
+
+{% if not rows %}
+<div class="card p-5 text-center text-muted">
+    还没有客户数据——订单同步时会自动把买家手机号沉淀进来。
+</div>
+{% else %}
+<div class="card p-0">
+<table class="table table-sm align-middle mb-0">
+    <thead class="table-light"><tr>
+        <th>姓名</th><th>手机号</th><th>城市</th>
+        <th class="text-end">下单</th><th class="text-end">累计消费</th>
+        <th>买过</th><th>最近下单</th><th class="text-end">操作</th>
+    </tr></thead>
+    <tbody>
+    {% for c in rows %}
+    <tr>
+        <td>{{ c.name }}
+            {% if c.order_count > 1 %}<span class="badge text-bg-danger">回头客</span>{% endif %}</td>
+        <td class="text-nowrap"><code>{{ c.phone }}</code></td>
+        <td class="text-muted small">{{ c.city }}</td>
+        <td class="text-end">{{ c.order_count }}</td>
+        <td class="text-end">¥{{ '%.1f'|format(c.total_spend or 0) }}</td>
+        <td class="text-muted small" title="{{ c.titles }}">{{ (c.titles or '')[:30] }}{{ '…' if (c.titles or '')|length > 30 }}</td>
+        <td class="text-muted small text-nowrap">{{ (c.last_seen or '')[:10] }}</td>
+        <td class="text-end">
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyPhone('{{ c.phone }}',this)">复制手机号</button>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyPhone(p, btn){
+    navigator.clipboard.writeText(p).then(()=>{
+        btn.textContent='已复制'; btn.classList.replace('btn-outline-secondary','btn-success');
+        setTimeout(()=>{btn.textContent='复制手机号';
+            btn.classList.replace('btn-success','btn-outline-secondary');},1500);
+    });
+}
+</script>
+{% endblock %}

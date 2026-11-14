@@ -1,0 +1,27 @@
+# 运行数据、凭据和登录态
+*.db
+*.db-*
+*.sqlite*
+*.enc
+*.key
+*.pem
+*.dpapi
+*.log
+*.lock
+.env
+.env.*
+!.env.example
+browser_data/
+logs/
+backups/
+locks/
+data/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+automation.paused
+cookies*.json
+storage_state*.json
+kongfz-login-status.json
+NUL

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}模板管理 - 闲书书{% endblock %}
+{% block content %}
+<div class="topbar"><strong>模板管理</strong>
+    <span class="text-muted">可用变量：{书名} {作者} {出版社} {年份} {ISBN} {售价}</span></div>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card p-3">
+            <h6>新建模板</h6>
+            <form method="post" action="{{ url_for('templates.create') }}">
+                <input class="form-control mb-2" name="name" placeholder="模板名称" required>
+                <select class="form-select mb-2" name="type">
+                    <option value="title">标题模板</option>
+                    <option value="description">文案模板</option>
+                </select>
+                <textarea class="form-control mb-2" name="content" rows="6"
+                          placeholder="例：【正版二手】{书名} {作者} {出版社} 包邮" required></textarea>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="is_default" id="d1">
+                    <label class="form-check-label" for="d1">设为该类默认</label>
+                </div>
+                <button class="btn btn-primary btn-sm">保存模板</button>
+            </form>
+        </div>
+    </div>
+    <div class="col-md-8">
+        {% for tname, tlist in [('标题模板', tpl_title), ('文案模板', tpl_desc)] %}
+        <div class="card p-3 mb-3">
+            <h6>{{ tname }}（{{ tlist|length }}）</h6>
+            {% for t in tlist %}
+            <form method="post" action="{{ url_for('templates.update', tid=t.id) }}" class="border rounded p-2 mb-2">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <input class="form-control form-control-sm" style="max-width:200px" name="name" value="{{ t.name }}">
+                    {% if t.is_default %}<span class="badge text-bg-success">默认</span>{% endif %}
+                    <div class="form-check ms-2">
+                        <input class="form-check-input" type="checkbox" name="is_default" id="dd{{ t.id }}" {{ 'checked' if t.is_default }}>
+                        <label class="form-check-label small" for="dd{{ t.id }}">默认</label>
+                    </div>
+                    <div class="ms-auto">
+                        <button class="btn btn-sm btn-outline-primary">保存</button>
+                        <button class="btn btn-sm btn-outline-danger" form="del-{{ t.id }}"
+                                onclick="return confirm('删除模板 {{ t.name }} ?')">删除</button>
+                    </div>
+                </div>
+                <textarea class="form-control form-control-sm" name="content" rows="3">{{ t.content }}</textarea>
+            </form>
+            <form id="del-{{ t.id }}" method="post" action="{{ url_for('templates.delete', tid=t.id) }}"></form>
+            {% else %}<div class="text-muted small">暂无</div>{% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
