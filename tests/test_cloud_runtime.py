@@ -109,7 +109,7 @@ def offline_write(): return {'ok':True}
 client=app.test_client()
 assert client.get('/orders',base_url='https://test.invalid').status_code == 302
 script=client.get('/scripts/kfz_address.user.js',base_url='https://test.invalid')
-assert script.status_code == 200 and '@version      2.0' in script.get_data(as_text=True)
+assert script.status_code == 200 and '@version      2.1.0' in script.get_data(as_text=True)
 assert client.post('/orders/1/browser_target',base_url='https://test.invalid').status_code == 401
 assert client.post('/orders/1/sync_address',base_url='https://test.invalid').status_code == 401
 assert client.get('/internal/browser-auth',base_url='https://test.invalid').status_code == 401

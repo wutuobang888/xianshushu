@@ -179,10 +179,7 @@ def sync_address(oid):
 
 @bp.route('/orders/<int:oid>/browser_target', methods=['POST'])
 def browser_target(oid):
-    """仅供已登录本站的浏览器地址助手读取本笔订单，不开放跨域匿名接口。"""
-    import config
-    if not config.CLOUD_MODE:
-        return jsonify(ok=False), 404
+    """地址助手按本单读取：云端要求登录，本地要求同源会话及 CSRF。"""
     from services.checkout_task import fresh_receiver
     order = models.query('SELECT * FROM orders WHERE id=?', (oid,), one=True)
     if not order or order['status'] not in ('pending','purchasing'):

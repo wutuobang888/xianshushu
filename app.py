@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Flask 主入口：初始化数据库、注册路由、启动定时任务。"""
 import logging
+import secrets
 
-from flask import Flask, jsonify, redirect, request
+from flask import Flask, jsonify, redirect, request, session, abort
 
 import config
 import models
@@ -33,6 +34,33 @@ def create_app():
     from routes.settings_routes import bp as settings_bp
     for bp in (order_bp, product_bp, report_bp, template_bp, settings_bp):
         app.register_blueprint(bp)
+
+    if not config.CLOUD_MODE:
+        app.secret_key = secrets.token_hex(32)
+
+        def local_csrf_token():
+            if 'local_csrf' not in session:
+                session['local_csrf'] = secrets.token_urlsafe(32)
+            return session['local_csrf']
+
+        app.jinja_env.globals['csrf_token'] = local_csrf_token
+
+        @app.before_request
+        def protect_local_address_helper():
+            if request.host.split(':')[0] not in ('127.0.0.1', 'localhost'):
+                abort(403)
+            if request.endpoint == 'orders.browser_target':
+                origin = request.headers.get('Origin', '')
+                token = request.headers.get('X-CSRF-Token', '')
+                if (origin != request.host_url.rstrip('/')
+                        or not token or not secrets.compare_digest(token, session.get('local_csrf', ''))):
+                    abort(403)
+
+        @app.after_request
+        def private_local_helper_response(response):
+            if request.endpoint == 'orders.browser_target':
+                response.headers['Cache-Control'] = 'no-store'
+            return response
 
     @app.before_request
     def migrated_local_instance():

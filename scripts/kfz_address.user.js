@@ -1,64 +1,84 @@
 // ==UserScript==
 // @name         闲鱼选品-孔夫子填地址
 // @namespace    xianshou.kfz.address
-// @version      2.0
+// @version      2.1.0
 // @description  直接打开孔夫子网页，按当前闲鱼订单自动填写地址；不提交订单、不付款
 // @match        https://books.example.com/orders*
+// @match        http://127.0.0.1:5000/orders*
+// @match        http://127.0.0.1:5000/
+// @match        http://localhost:5000/orders*
+// @match        http://localhost:5000/
 // @match        *://*.kongfz.com/*
 // @match        *://kongfz.com/*
 // @grant        GM_setClipboard
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_listValues
+// @grant        GM_deleteValue
 // @grant        unsafeWindow
-// @updateURL    https://books.example.com/scripts/kfz_address.user.js
-// @downloadURL  https://books.example.com/scripts/kfz_address.user.js
 // @run-at       document-idle
 // ==/UserScript==
 
 (function () {
     'use strict';
-    const API = 'https://books.example.com';
+    const local = ['http://127.0.0.1:5000','http://localhost:5000'].includes(location.origin);
+    const API = local ? location.origin : 'https://books.example.com';
     const REMARK = '无需发票，请勿放任何店铺信息';
     const STORE = 'xss_browser_targets_v2';
     const CONTEXT = 'xss_ctx';
     const TTL = 10 * 60 * 1000;
     let target = null;
+    const cacheKey = nonce => STORE + ':' + nonce;
     const official = url => ['book.kongfz.com','item.kongfz.com','search.kongfz.com','order.kongfz.com'].includes(url.hostname)
         && ['http:','https:'].includes(url.protocol) && !url.username && !url.password;
 
     // 地址仅在已登录的闲书书页面同源读取；URL只携带随机关联号，不携带地址或凭据。
     if (location.origin === API) {
-        document.documentElement.dataset.xssAddressHelper = '2';
+        document.documentElement.dataset.xssAddressHelper = '2.1.0';
+        const indicator = document.createElement('p');
+        indicator.textContent = '地址助手已启用 · 从本页货源入口进入，10分钟内逐笔完成采购';
+        indicator.style.cssText = 'color:#1a7f37;padding:8px 16px';
+        (document.querySelector('main') || document.body).prepend(indicator);
+        let preparing = false;
         const openSource = async event => {
             const link = event.target.closest('a[data-xss-order]');
             if (!link || ![0,1].includes(event.button)) return;
             const url = new URL(link.href);
             if (!official(url)) return;
             event.preventDefault(); event.stopImmediatePropagation();
+            if (preparing) { alert('上一笔订单正在读取，请稍候再打开'); return; }
             const popup = window.open('about:blank','_blank');
             if (!popup) { alert('请允许闲书书打开新标签页，然后重试'); return; }
             popup.opener = null;
             popup.document.body.textContent = '正在读取本笔订单的收货信息…';
+            preparing = true;
             try {
                 const csrf = document.querySelector('script[data-csrf]')?.dataset.csrf;
                 if (!csrf) throw new Error('网站登录已过期，请刷新后重试');
                 const response = await fetch(API + '/orders/' + Number(link.dataset.xssOrder) + '/browser_target', {
-                    method:'POST', credentials:'same-origin', headers:{'X-CSRF-Token':csrf}
+                    method:'POST', credentials:'same-origin', headers:{'X-CSRF-Token':csrf}, signal:AbortSignal.timeout(20000)
                 });
                 const result = await response.json();
                 if (!response.ok || !result.ok) throw new Error(result.error || '收货信息读取失败');
+                if (Number(result.target?.order_id) !== Number(link.dataset.xssOrder) || !result.target?.receiver)
+                    throw new Error('接口返回的订单不一致，已停止打开货源');
                 const nonce = crypto.randomUUID();
-                const previous = await GM_getValue(STORE, {});
-                const cache = Object.fromEntries(Object.entries(previous)
-                    .filter(([,value]) => Date.now()-value.ts < TTL).slice(-63));
-                cache[nonce] = {target:result.target,ts:Date.now(),used:false};
-                await GM_setValue(STORE, cache);
+                // 每笔单独存储，避免不同订单页同时读写同一个对象而丢失上下文。
+                const keys = await GM_listValues();
+                const active = [];
+                for (const key of keys.filter(key => key.startsWith(STORE + ':'))) {
+                    const entry = await GM_getValue(key, null);
+                    if (!entry || Date.now()-entry.ts >= TTL) await GM_deleteValue(key);
+                    else active.push({key,ts:entry.ts});
+                }
+                if (active.length >= 64) throw new Error('待处理订单过多，请先完成采购或等待地址缓存过期');
+                await GM_setValue(cacheKey(nonce), {target:result.target,ts:Date.now(),used:false});
                 url.protocol = 'https:';
                 url.searchParams.set(CONTEXT,nonce);
                 popup.location.replace(url.href);
             } catch (error) {
                 popup.close(); alert(error.message || '地址助手未能准备本单信息，请重试');
-            }
+            } finally { preparing = false; }
         };
         document.addEventListener('click',openSource,true);
         document.addEventListener('auxclick',openSource,true);
@@ -69,10 +89,11 @@
     if (nonce) sessionStorage.setItem(CONTEXT,nonce);
     else nonce = sessionStorage.getItem(CONTEXT);
     if (!nonce) return;
-    const context = GM_getValue(STORE,{})[nonce];
+    const context = GM_getValue(cacheKey(nonce),null);
     if (!context || context.used || Date.now()-context.ts >= TTL) return;
     target = context.target;
     if (!target?.receiver) return;
+    setTimeout(() => GM_deleteValue(cacheKey(nonce)), Math.max(0, TTL-(Date.now()-context.ts)));
     const mark = value => {
         try {
             const url = new URL(value,location.href);
@@ -100,13 +121,13 @@
         }
     },true);
     const timer=setInterval(async () => {
-        if (started || location.hostname!=='order.kongfz.com' || !document.querySelector('.address-list li')) return;
+        if (started || location.hostname!=='order.kongfz.com' || !document.querySelector('.address-list')) return;
         if (Date.now()-context.ts >= TTL) { clearInterval(timer);toast('本单地址信息已过期，请从闲书书重新打开',false);return; }
         started=true;
         try {
             if (await autoFill()) {
-                const cache=await GM_getValue(STORE,{});
-                if (cache[nonce]) { cache[nonce].used=true;await GM_setValue(STORE,cache); }
+                context.used=true;
+                await GM_setValue(cacheKey(nonce),context);
             }
         } catch (_) { fallback('自动填地址未完成，请核对页面'); }
         clearInterval(timer);
@@ -146,7 +167,7 @@
         el.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    // ---------- 匹配：姓名+手机+地区三者一致才敢选；地区不符=坏条原地修复 ----------
+    // ---------- 匹配：姓名、手机及完整地址一致才选择；不覆盖其他地址 ----------
     const norm = s => (s || '').replace(/\s+/g, '');
     const core = s => norm(s).replace(/(省|市|区|县|自治区|壮族|回族|维吾尔|特别行政区)/g, '');
     const addressKey = value => norm((value||'').normalize('NFKC')).replace(/[，,。:：;；()]/g,'')
@@ -154,7 +175,7 @@
         .replace(/宁夏回族自治区/g,'宁夏').replace(/新疆维吾尔自治区/g,'新疆').replace(/西藏自治区/g,'西藏');
     function findMatch() {
         const r=target.receiver;
-        let match=null,repair=null;
+        let match=null;
         for(const li of document.querySelectorAll('.address-list li')) {
             const name=li.querySelector('.address-info1 span:not(.phone)')?.textContent;
             const phone=li.querySelector('.address-info1 .phone')?.textContent;
@@ -162,9 +183,8 @@
             const address=li.querySelector('.address-info2')?.cloneNode(true);
             address?.querySelectorAll('.default').forEach(el=>el.remove());
             if(address && addressKey(address.textContent)===addressKey(fullAddress())) match ||= li;
-            else repair ||= li;
         }
-        return {match,repair};
+        return {match};
     }
     async function until(check,ms=8000) {
         const start=Date.now();
@@ -175,13 +195,12 @@
     // ---------- 主流程（与 bots/kongfz_checkout.py 同套真实选择器） ----------
     async function autoFill() {
         const r=target.receiver;
-        let {match,repair}=findMatch();
+        let {match}=findMatch();
         if(!match) {
-            const cards=[...document.querySelectorAll('.address-list li')];
-            const card=repair||cards[cards.length-1];
-            const edit=card?.querySelector('.address-operate .edit');
-            if(!edit) {fallback('未找到地址编辑入口');return false;}
-            jsClick(edit);
+            const add=[...document.querySelectorAll('button,a,.add-address,.address-add,.add-address-btn')]
+                .find(el => el.offsetParent && /^[+＋]?\s*(新增|添加|使用新)(收货)?地址$/.test((el.textContent||'').trim()));
+            if(!add) {fallback('未找到新增地址入口，请手动新增本单地址后从订单重新进入');return false;}
+            jsClick(add);
             if(!await waitEl('.address-dialog .el-dialog textarea',5000)) {fallback('编辑地址弹窗未打开');return false;}
             const dialog=document.querySelector('.address-dialog .el-dialog');
             setVal(dialog.querySelector('textarea'),r.receiver_name+' '+r.receiver_mobile+' '+fullAddress());
