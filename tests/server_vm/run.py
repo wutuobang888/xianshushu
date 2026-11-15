@@ -22,7 +22,7 @@ public = key.with_suffix('.pub').read_text().strip()
 user_data = WORK/'user-data'
 user_data.write_text(f'''#cloud-config
 hostname: xss-acceptance-guest
-manage_etc_hosts: true
+manage_etc_hosts: false
 disable_root: false
 ssh_pwauth: false
 users:
@@ -53,19 +53,22 @@ def ssh(command, *, capture=False, check=True, timeout=900):
     return subprocess.run(['ssh', *ssh_options, address, command], check=check, capture_output=capture,
                           text=True, timeout=timeout)
 
-def require_guest():
+def guest_boot_id():
     # 宿主机不执行任何系统电源命令；SSH 目标固定为本机 QEMU 转发端口，无回退目标。
-    value = ssh('cat /etc/xss-acceptance-guest; hostname; systemd-detect-virt --vm', capture=True).stdout.splitlines()
-    assert len(value) == 3 and value[0] == nonce and value[1] == 'xss-acceptance-guest' and value[2] in ('qemu', 'kvm'), 'VM identity mismatch'
+    result = ssh('cat /etc/xss-acceptance-guest; hostname; systemd-detect-virt --vm; cat /proc/sys/kernel/random/boot_id', capture=True, check=False, timeout=8)
+    if result.returncode:
+        return None
+    value = result.stdout.splitlines()
+    assert len(value) == 4 and value[0] == nonce and value[1] == 'xss-acceptance-guest' and value[2] in ('qemu', 'kvm'), 'VM identity mismatch'
+    return value[3]
 
-def wait_ssh():
+def wait_ssh(previous_boot=None):
     for _ in range(120):
         if process.poll() is not None:
             raise RuntimeError('QEMU exited; inspect qemu-console.log')
-        result = ssh('true', capture=True, check=False, timeout=8)
-        if result.returncode == 0:
-            require_guest()
-            return
+        boot_id = guest_boot_id()
+        if boot_id and boot_id != previous_boot:
+            return boot_id
         time.sleep(2)
     raise RuntimeError('Guest SSH did not become ready')
 
@@ -92,17 +95,11 @@ try:
     python = '/srv/xianshushu/live-venv/bin/python '
     ssh(python+script+'acceptance.py', timeout=240)
     ssh(python+script+'regressions.py', timeout=600)
-    require_guest()
-    boot = ssh('cat /proc/sys/kernel/random/boot_id', capture=True).stdout.strip()
+    boot = guest_boot_id()
+    assert boot, 'Guest identity unavailable before reboot'
     ssh('systemctl enable xianshushu-worker; systemctl reboot', check=False)
-    # 先确认旧 SSH 已离线，再等待同一台有标记的来宾恢复。
-    for _ in range(50):
-        probe = ssh('cat /proc/sys/kernel/random/boot_id', capture=True, check=False, timeout=8)
-        if probe.returncode != 0 or probe.stdout.strip() != boot:
-            break
-        time.sleep(.5)
-    wait_ssh()
-    after = ssh('cat /proc/sys/kernel/random/boot_id', capture=True).stdout.strip()
+    # 一次探测同时校验身份与新启动编号；重启过渡期间的断线只继续等待。
+    after = wait_ssh(previous_boot=boot)
     assert after != boot, 'Guest did not reboot'
     ssh(python+script+'reboot_check.py', timeout=90)
     (RESULTS/'vm-identity.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],

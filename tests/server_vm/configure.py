@@ -5,6 +5,7 @@ import json, os, pty, secrets, select, subprocess, time
 
 os.umask(0o077)
 base=Path('/srv/xianshushu'); source=base/'live-app'
+Path('/etc/hosts').open('a').write('\n127.0.1.1 xss-acceptance-guest\n127.0.0.1 books.acceptance.test\n')
 password=secrets.token_urlsafe(24)
 Path('/root/acceptance-input.json').write_text(json.dumps({'username':'acceptance-user','password':password}))
 master,slave=pty.openpty()
@@ -33,7 +34,6 @@ import shutil
 for file in (source/'deploy').glob('xianshushu-*.service'):
     shutil.copyfile(file,Path('/etc/systemd/system')/file.name)
 Path('/etc/nginx/snippets/xianshushu-browser.locations').write_text((source/'deploy/browser-nginx.locations').read_text().replace('books.example.com','books.acceptance.test'))
-Path('/etc/hosts').open('a').write('\n127.0.0.1 books.acceptance.test\n')
 subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','3','-subj','/CN=books.acceptance.test','-addext','subjectAltName=DNS:books.acceptance.test','-keyout','/etc/nginx/acceptance.key','-out','/etc/nginx/acceptance.crt'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 Path('/etc/nginx/conf.d/acceptance.conf').write_text('''server {
  listen 80;

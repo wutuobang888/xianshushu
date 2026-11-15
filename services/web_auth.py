@@ -69,7 +69,7 @@ def install(app):
                     with attempt_lock:
                         attempts.pop(key,None)
                     return redirect(destination)
-                error = '账号或密码不正确，请使用原网站访问账号。'
+                error = '账号或密码不正确，请使用部署时设置的网站账号。'
         return render_template('login.html',error=error,next_path=destination)
 
     @app.route('/internal/browser-auth')
