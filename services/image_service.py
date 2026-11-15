@@ -249,7 +249,7 @@ def set_collect_target(entry_url):
 def collect_target_info(entry_url):
     """只接受本地已知图池；目标由标签页明确提交，不能借用全局旧目标。"""
     if not isinstance(entry_url, str) or not entry_url.strip():
-        raise ValueError("收图缺少书籍目标，请更新收图脚本后从网站图池重新打开找图网站")
+        raise ValueError("收图缺少书籍目标，请更新浏览器扩展后从网站图池重新打开找图网站")
     entry_url = entry_url.strip()
     row = models.query(
         "SELECT book_title FROM book_sources WHERE kongfz_url=?"

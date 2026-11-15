@@ -16,6 +16,7 @@ Flask + SQLite + Playwright 的闲鱼图书采购管理系统。一个仓库包�
 | 部署到自己的 Linux 服务器 | [服务器部署说明](docs/server-deploy.md) |
 | 修改代码、了解模块职责 | [架构说明](ARCHITECTURE.md) |
 | 与最初源码、现用网站有何区别 | [版本对照](docs/version-comparison.md) |
+| 准备发给别人、查看已测范围 | [分发验收](docs/distribution-check.md) |
 
 建议第一次使用者选择 Windows 本地版。安装独立扩展后，在常用 Chrome / Edge 从订单货源入口进入孔夫子核对填址，在图池入口使用收图功能；也可使用“填单”打开项目专用浏览器。扩展 ZIP 下载后先解压，通过浏览器“加载解压缩的扩展程序”安装，目前尚未上架扩展商店。
 
@@ -28,16 +29,12 @@ Flask + SQLite + Playwright 的闲鱼图书采购管理系统。一个仓库包�
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-$env:XIANSHUSHU_CLOUD_MODE = "0"
-$env:XIANSHUSHU_SCHEDULER = "0"
-$env:DEMO_MODE = "1"
-$env:FLASK_DEBUG = "0"
-$env:XIANSHUSHU_DATA_DIR = "$PWD/data/demo"
-New-Item -ItemType Directory -Force $env:XIANSHUSHU_DATA_DIR | Out-Null
-.\.venv\Scripts\python.exe app.py
+.\.venv\Scripts\python.exe scripts/local_launch.py demo
 ```
 
 打开 http://127.0.0.1:5000/orders 。保留终端窗口；结束时按 Ctrl+C。演示目录里不要填入真实凭据：填入后部分操作会调用真实平台。正式使用请按完整安装文档切换到独立的 data/live 目录。
+
+首次安装后可双击 `scripts/run_app.bat` 体验演示，双击 `scripts/run_live.bat` 使用正式数据目录。两个入口均使用项目 `.venv`，默认不开业务任务；正式任务需验收后明确启用。
 
 如果 Edge 未安装或准备改用 Chromium，浏览器安装与选择方法见完整安装说明。代码、文档与外部平台页面仍可能随环境不同出现兼容问题；不要把演示页面正常等同于真实采购与发货已经验证。
 

@@ -49,34 +49,21 @@ python -m venv .venv
 在同一个 PowerShell 中完整执行：
 
 ```powershell
-$env:XIANSHUSHU_CLOUD_MODE = "0"
-$env:XIANSHUSHU_SCHEDULER = "0"
-$env:DEMO_MODE = "1"
-$env:FLASK_DEBUG = "0"
-$env:XIANSHUSHU_DATA_DIR = "$PWD/data/demo"
-New-Item -ItemType Directory -Force $env:XIANSHUSHU_DATA_DIR | Out-Null
-.\.venv\Scripts\python.exe app.py
+.\.venv\Scripts\python.exe scripts/local_launch.py demo
 ```
 
 看到 `Running on http://127.0.0.1:5000` 后，打开 http://127.0.0.1:5000/orders 。不需要网站账号密码。本地仅监听本机回环地址，不要把这个开发入口直接暴露到公网。
 
 应能看到演示订单及八个业务页面。此时保持默认的空闲管家凭据，只浏览页面；浏览器搜索、抓图等功能仍可能访问外部网站。`DEMO_MODE=1` 不是对所有真实接口写入的全局开关，配置真实凭据后部分功能会使用真实接口。
 
-终端需要一直开着；按 Ctrl+C 停止网站。关掉网页不会停止程序。新开 PowerShell 后，`$env:...` 不再保留，需要重新执行对应启动代码块。
+终端需要一直开着；按 Ctrl+C 停止网站。关掉网页不会停止程序。新开 PowerShell 后，重新运行对应的启动命令。
 
 ## 5. 切换到真实业务（与演示数据分开）
 
 先在演示终端按 Ctrl+C。仍在源码根目录执行下面命令：
 
 ```powershell
-$env:XIANSHUSHU_CLOUD_MODE = "0"
-$env:XIANSHUSHU_SCHEDULER = "0"
-$env:DEMO_MODE = "0"
-$env:FLASK_DEBUG = "0"
-$env:XIANSHUSHU_DATA_DIR = "$PWD/data/live"
-$env:KONGFZ_BROWSER_CHANNEL = "msedge"
-New-Item -ItemType Directory -Force $env:XIANSHUSHU_DATA_DIR | Out-Null
-.\.venv\Scripts\python.exe app.py
+.\.venv\Scripts\python.exe scripts/local_launch.py live
 ```
 
 `data/live` 会自动创建自己的数据库；不需要手工建表，也不需要复制演示数据库。首次正式启动没有订单是正常的。
@@ -96,10 +83,7 @@ New-Item -ItemType Directory -Force $env:XIANSHUSHU_DATA_DIR | Out-Null
 在保持网站运行的情况下，另开一个位于同一源码根目录的 PowerShell。登录命令也必须指向同一数据目录：
 
 ```powershell
-$env:XIANSHUSHU_CLOUD_MODE = "0"
-$env:XIANSHUSHU_DATA_DIR = "$PWD/data/live"
-$env:KONGFZ_BROWSER_CHANNEL = "msedge"
-.\.venv\Scripts\python.exe -m bots.kongfz_bot login
+.\.venv\Scripts\python.exe scripts/local_launch.py login
 ```
 
 程序会打开独立的 Edge 窗口。用自己的孔夫子账号登录；出现验证码时亲自完成。等待终端显示“检测到孔夫子登录态，已保存”。登录成功后由程序关闭窗口并保存登录态，后续查询复用它。
@@ -117,13 +101,23 @@ $env:KONGFZ_BROWSER_CHANNEL = "chromium"
 
 ## 7. 日常启动与自动任务
 
-日常先按第 5 节启动代码运行，默认 `XIANSHUSHU_SCHEDULER=0`，由页面手动同步。若确认订单匹配、采购绑定和发货规则符合自己的业务，可停止程序，将该行改为：
+首次依赖安装完成后，日常也可以直接双击源码目录里的启动文件：
+
+- `scripts/run_app.bat`：演示版，固定使用 `data/demo`，关闭业务任务。
+- `scripts/run_live.bat`：正式版，固定使用 `data/live`，默认关闭业务任务。
+- `scripts/kongfz_login.bat`：为 `data/live` 中的项目专用浏览器登录孔夫子。
+
+这些入口统一使用源码目录的 `.venv`，不会改用系统 Python。终端保持可见，方便查看错误、按 Ctrl+C 正常停止；旧的 start_web.bat / run_web.vbs 入口也统一转到演示启动器。
+
+如果演示库曾保存平台凭据，演示启动器会拒绝启动，不删除数据库；请先私有备份并核对，之后用正式目录。它也不会继承终端里的闲管家凭据。
+
+日常先按第 5 节启动，默认关闭调度，由页面手动同步。若确认订单匹配、采购绑定和发货规则符合自己的业务，可停止程序，明确启用正式任务：
 
 ```powershell
-$env:XIANSHUSHU_SCHEDULER = "1"
+.\.venv\Scripts\python.exe scripts/local_launch.py live --tasks
 ```
 
-然后在同一终端运行 `.\.venv\Scripts\python.exe app.py`。**启用调度意味着采购监控可能自动绑定采购单，并在核验通过后向闲鱼回填发货，不只是自动刷新页面。** 配好凭据后须重启才能注册订单同步任务。
+**启用调度意味着采购监控可能自动绑定采购单，并在核验通过后向闲鱼回填发货，不只是自动刷新页面。** 配好凭据后须重启才能注册订单同步任务。双击 run_live.bat 不会开启任务，需要由你完成业务验收后执行上述命令。
 
 默认订单和退款同步每 10 分钟、商品同步每 60 分钟、孔夫子检查每 25 分钟，热书榜每天 08:05 执行。电脑需保持开机、联网，终端不能关闭。Windows 本地不要另外启动 worker.py，也不要重复开多个网站进程。
 

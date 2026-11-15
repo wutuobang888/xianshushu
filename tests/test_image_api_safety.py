@@ -70,7 +70,7 @@ class ImageSafetyTests(unittest.TestCase):
         self.collect_target.assert_not_called()
 
     def test_missing_target_is_rejected_before_insertion(self):
-        with self.assertRaisesRegex(ValueError, "更新收图脚本"):
+        with self.assertRaisesRegex(ValueError, "更新浏览器扩展"):
             images.collect_xhs(["https://example.invalid/image"])
         self.assertEqual(self.db.execute("SELECT count(*) FROM image_pool").fetchone()[0], 0)
         self.download.assert_not_called()
