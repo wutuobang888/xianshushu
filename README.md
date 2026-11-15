@@ -22,6 +22,8 @@ Flask + SQLite + Playwright 的闲鱼图书采购管理系统。一个仓库包�
 
 [下载独立扩展 1.1.0](https://github.com/wutuobang888/xianshushu/releases/download/address-helper-v1.1.0/xianshushu-address-helper-1.1.0.zip) · [安装教程](docs/browser-extension.md)
 
+[下载整套源码 1.1.2](https://github.com/wutuobang888/xianshushu/releases/tag/server-verified-v1.1.2)：包含 Windows 本地与 Linux 服务器代码、独立扩展及中文说明。
+
 ## Windows 本地快速体验
 
 先安装 64 位 Python（源码使用 Python 3.10+ 语法）和 Microsoft Edge。下载仓库 ZIP 并解压，在包含 app.py 的文件夹打开 PowerShell。以下命令使用虚拟环境内的 Python，无需激活脚本：
@@ -44,7 +46,7 @@ python -m venv .venv
 
 正式 Web 使用 production_wsgi:app，必须设置 XIANSHUSHU_CLOUD_MODE=1、DEMO_MODE=0、XIANSHUSHU_SCHEDULER=0、FLASK_DEBUG=0，并配置独立随机 FLASK_SECRET_KEY、站内登录凭据文件与 HTTPS 反向代理。后台调度单独运行 worker.py，避免启动多个业务任务实例。浏览器交互另需显示服务及受认证保护的网关。
 
-已在全新 Debian 13 / Python 3.13.5 隔离系统完成从零安装、HTTPS 登录、桌面网关、定时同步和重启验收。详见 [服务器验收记录](docs/server-verification.md)。真实平台账号需自行配置及核对；不要执行历史迁移脚本，仓库不提供这些脚本。
+已在 GitHub 独立 QEMU Debian 13 / Python 3.13.5 虚拟机完成从零安装、HTTPS 登录、桌面网关、定时同步和整机重启自启验收。详见 [服务器验收记录](docs/server-verification.md)。真实平台账号需自行配置及核对；不要执行历史迁移脚本，仓库不提供这些脚本。
 
 ## 地址与采购限制
 
