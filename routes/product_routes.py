@@ -172,6 +172,24 @@ def userscript(fname):
     return send_file(f"scripts/{fname}", mimetype="text/javascript")
 
 
+@bp.route('/downloads/address-extension.zip')
+def address_extension():
+    """固定文件白名单打包，避免把运行数据混入浏览器安装包。"""
+    from io import BytesIO
+    from zipfile import ZipFile, ZIP_DEFLATED
+    from pathlib import Path
+    from flask import send_file
+    from scripts.package_extension import FILES
+    source = Path(__file__).resolve().parents[1] / 'browser-extension'
+    stream = BytesIO()
+    with ZipFile(stream, 'w', ZIP_DEFLATED) as archive:
+        for name in FILES:
+            archive.write(source/name, name)
+    stream.seek(0)
+    return send_file(stream, mimetype='application/zip', as_attachment=True,
+                     download_name='xianshushu-address-helper-1.0.0.zip')
+
+
 # ---------- 图片候选池 ----------
 
 @bp.route("/api/images/fetch", methods=["POST"])

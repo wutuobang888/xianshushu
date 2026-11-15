@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "闲书书采购地址助手",
+  "version": "1.0.0",
+  "description": "从闲书书订单进入孔夫子，按本单核对并填写收货地址；不自动提交采购或付款。",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "scripting", "alarms", "webNavigation"],
+  "host_permissions": [
+    "http://127.0.0.1/*", "http://localhost/*",
+    "https://book.kongfz.com/*", "https://item.kongfz.com/*",
+    "https://search.kongfz.com/*", "https://order.kongfz.com/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_popup": "popup.html", "default_title": "闲书书采购地址助手"},
+  "content_scripts": [{
+    "matches": [
+      "http://127.0.0.1/*", "http://localhost/*",
+      "https://book.kongfz.com/*", "https://item.kongfz.com/*",
+      "https://search.kongfz.com/*", "https://order.kongfz.com/*"
+    ],
+    "js": ["policy.js", "address-engine.js", "content.js"],
+    "run_at": "document_start"
+  }]
+}

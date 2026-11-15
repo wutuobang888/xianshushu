@@ -1,10 +1,13 @@
 """本地地址助手接口：独立数据库、模拟平台读取，不访问真实订单。"""
 import importlib
+from io import BytesIO
+import json
 from pathlib import Path
 import re
 import unittest
 import uuid
 from unittest.mock import patch
+from zipfile import ZipFile
 
 import config
 import models
@@ -71,6 +74,20 @@ class LocalUserscriptTests(unittest.TestCase):
         response.close()
         settings=self.client.get('/settings',base_url=self.origin).get_data(as_text=True)
         self.assertIn('安装 / 更新本地地址助手',settings)
+
+    def test_native_extension_download_contains_only_fixed_install_files(self):
+        from scripts.package_extension import FILES
+        response=self.client.get('/downloads/address-extension.zip',base_url=self.origin)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.mimetype,'application/zip')
+        with ZipFile(BytesIO(response.data)) as archive:
+            self.assertEqual(set(archive.namelist()),set(FILES))
+            self.assertIsNone(archive.testzip())
+            manifest=json.loads(archive.read('manifest.json'))
+            self.assertEqual(manifest['manifest_version'],3)
+            self.assertEqual(manifest['version'],'1.0.0')
+            self.assertNotIn('<all_urls>',manifest['host_permissions'])
+        response.close()
 
 
 if __name__ == '__main__':
