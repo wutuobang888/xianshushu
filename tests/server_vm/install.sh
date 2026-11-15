@@ -18,6 +18,8 @@ runuser -u www-data -- env HOME=/srv/xianshushu/live-data PLAYWRIGHT_BROWSERS_PA
 /srv/xianshushu/live-venv/bin/python /srv/xianshushu/live-app/tests/server_vm/configure.py
 systemctl daemon-reload
 systemctl start xianshushu-display xianshushu-window-manager xianshushu-vnc xianshushu-browser xianshushu-web nginx
+nginx -t
+systemctl reload nginx
 # 安装完成后隔离外网：平台桩、HTTPS、VNC 只使用来宾自己的回环网络。
 cat > /etc/nftables.conf <<'NFT'
 table inet xss_acceptance {

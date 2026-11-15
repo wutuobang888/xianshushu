@@ -70,7 +70,7 @@ try:
         assert f'0.0.0.0:{port}' not in ports and f'[::]:{port}' not in ports,ports
     record('backend_ports_loopback_only')
     r=client.get('http://books.acceptance.test/orders?check=1',allow_redirects=False)
-    assert r.status_code==301 and r.headers['Location']==BASE+'/orders?check=1'
+    assert r.status_code==301 and r.headers.get('Location')==BASE+'/orders?check=1', (r.status_code,r.headers.get('Location'))
     r=client.get(BASE+'/orders',allow_redirects=False);assert r.status_code==302
     assert client.post(BASE+'/settings/xgj',data={}).status_code==401
     assert client.get(BASE+'/browser/vnc.html',allow_redirects=False).status_code==302
