@@ -12,7 +12,7 @@ document.getElementById('save').addEventListener('click',async () => {
         const {siteOrigin: previous} = await chrome.storage.local.get('siteOrigin');
         await chrome.scripting.unregisterContentScripts({ids:['xss-site']}).catch(() => {});
         await chrome.scripting.registerContentScripts([{
-            id:'xss-site',matches:[url.origin+'/*'],js:['policy.js','address-engine.js','content.js'],runAt:'document_start'
+            id:'xss-site',matches:[url.origin+'/*'],js:['policy.js','address-engine.js','collector.js','content.js'],runAt:'document_start'
         }]);
         await chrome.storage.local.set({siteOrigin:url.origin});
         if (previous && previous !== url.origin)

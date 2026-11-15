@@ -27,8 +27,8 @@
         <button id="btn-reload-pool" class="btn btn-sm btn-outline-secondary ms-2">刷新显示</button>
         <button id="btn-refresh-pool" class="btn btn-sm btn-outline-secondary ms-2">换一批店抓图</button>
     </div>
-    <div class="small text-muted mb-2">提示脚本版本过旧或没有收图按钮时，
-        <a href="{{ url_for('products.userscript', fname='xhs_collect.user.js') }}" target="_blank">更新收图工具</a>，再从当前图池重新打开找图网站。</div>
+    <div class="small text-muted mb-2">没有收图按钮时，请在
+        <a href="{{ url_for('settings.index') }}">系统设置</a>下载独立浏览器扩展，加载后刷新本页，再从当前图池打开找图网站。</div>
     <div class="small text-muted mb-2">孔夫子图片上架时自动裁剪水印，可先点「裁剪水印」检查书本是否完整；不满意可还原。</div>
     <div id="pool-box"></div>
 </div>
@@ -301,14 +301,12 @@ function kongfzCollectUrl(kw, entryUrl) {
     const url = new URL(entryUrl);
     if (!['item.kongfz.com', 'book.kongfz.com'].includes(url.hostname)) throw new Error('孔夫子条目链接无效');
     url.protocol = 'https:';
-    url.hash = 'xs_collect&entry_url=' + encodeURIComponent(entryUrl) + '&book_title=' + encodeURIComponent(kw || '');
     return url.href;
 }
 function xhsSearchUrl(kw, entryUrl) {
-    // 目标随链接进入小红书标签页，不再让脚本借用全局旧目标。
+    // 图池目标由扩展后台按标签页绑定，不写入网址。
     return 'https://www.xiaohongshu.com/search_result?keyword='
-        + encodeURIComponent(kw || '') + '#xs_collect&entry_url='
-        + encodeURIComponent(entryUrl || '') + '&book_title=' + encodeURIComponent(kw || '');
+        + encodeURIComponent(kw || '');
 }
 function setPoolContext(b) {   // 记住当前图池属于哪本书，更新小红书跳转链接
     curPoolEntry = b.kongfz_url || '';
@@ -330,7 +328,9 @@ const collectTip = document.getElementById('collect-tip');
 
 async function openXhsCollect(entryUrl, title, source = 'xhs') {
     if (!entryUrl) { alert('请先选择一本书的图池'); return; }
-    const popup = window.open('about:blank', '_blank');
+    if (!(document.documentElement.dataset.xssAddressHelper || '').startsWith('extension-')) {
+        alert('请先安装独立浏览器扩展并刷新本页'); return;
+    }
     try {
         const response = await fetch('/api/images/collect_target', {method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -341,10 +341,9 @@ async function openXhsCollect(entryUrl, title, source = 'xhs') {
         if (curPoolEntry === entryUrl)
             collectTip.textContent = `收图目标：《${title || data.title}》，${source === 'kongfz' ? '孔夫子卖家详情页' : '小红书笔记'}内点「收图」`;
         const url = source === 'kongfz' ? kongfzCollectUrl(title || data.title, entryUrl) : xhsSearchUrl(title || data.title, entryUrl);
-        if (popup) popup.location.href = url;
-        else { (source === 'kongfz' ? kongfzLink : xhsLink).href = url; alert('浏览器拦截了新窗口，请再次点击相应的找图按钮'); }
+        window.postMessage({channel:'xss-extension',type:'OPEN_COLLECT',url,
+            target:{entry_url:entryUrl,title:title || data.title || '当前书籍'}},location.origin);
     } catch (error) {
-        if (popup) popup.close();
         alert('开启收图失败：' + error.message);
     }
 }

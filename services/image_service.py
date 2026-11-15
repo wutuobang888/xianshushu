@@ -234,7 +234,7 @@ def restore_image(image_id):
     models.execute("UPDATE image_pool SET final_url=? WHERE id=?", (f"/pool_img/{image_id}", image_id))
 
 
-# ---------- 小红书收图（油猴回传） ----------
+# ---------- 小红书收图（浏览器扩展回传） ----------
 
 def collect_target():
     return models.get_setting("xhs_collect_target")

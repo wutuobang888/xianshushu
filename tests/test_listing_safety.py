@@ -233,6 +233,7 @@ class ListingSafetyTests(unittest.TestCase):
         from routes import order_routes, product_routes, report_routes, template_routes, settings_routes
         app = Flask(__name__, template_folder=str(Path(models.__file__).parent / "templates"))
         app.secret_key = "test"
+        app.jinja_env.globals['csrf_token'] = lambda: 'offline-token'
         for module in (order_routes, product_routes, report_routes, template_routes, settings_routes):
             app.register_blueprint(module.bp)
         models.execute("INSERT INTO orders(id,order_no,sale_price,status) VALUES(1,'test',30,'pending')")

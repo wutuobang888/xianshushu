@@ -163,15 +163,6 @@ def search():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@bp.route("/scripts/<path:fname>")
-def userscript(fname):
-    """吐出油猴脚本本体：浏览器打开 .user.js URL 会触发油猴安装页。"""
-    from flask import send_file
-    if not fname.endswith(".user.js") or "/" in fname or ".." in fname:
-        return "not found", 404
-    return send_file(f"scripts/{fname}", mimetype="text/javascript")
-
-
 @bp.route('/downloads/address-extension.zip')
 def address_extension():
     """固定文件白名单打包，避免把运行数据混入浏览器安装包。"""
@@ -187,7 +178,7 @@ def address_extension():
             archive.write(source/name, name)
     stream.seek(0)
     return send_file(stream, mimetype='application/zip', as_attachment=True,
-                     download_name='xianshushu-address-helper-1.0.0.zip')
+                     download_name='xianshushu-address-helper-1.1.0.zip')
 
 
 # ---------- 图片候选池 ----------
@@ -279,7 +270,7 @@ def collect_target():
 
 @bp.route("/api/images/collect", methods=["POST"])
 def collect_images():
-    """油猴脚本回传小红书笔记图片 -> 进当前收图目标的图池。"""
+    """浏览器扩展回传笔记或商品图片至明确绑定的图池。"""
     d = request.get_json(force=True, silent=True) or {}
     try:
         info = image_service.collect_target_info(d.get("entry_url"))

@@ -17,7 +17,7 @@ RECEIVER = dict(receiver_name='测试买家', receiver_mobile='13800000000',
                 town_name='测试街道', address='测试路1号')
 
 
-class LocalUserscriptTests(unittest.TestCase):
+class BrowserHelperTests(unittest.TestCase):
     def setUp(self):
         folder = Path(__file__).resolve().parents[1] / 'backups' / 'test-artifacts' / ('local-helper-' + uuid.uuid4().hex)
         folder.mkdir(parents=True)
@@ -66,14 +66,10 @@ class LocalUserscriptTests(unittest.TestCase):
 
     def test_rebinding_host_is_rejected_and_install_file_is_local(self):
         self.assertEqual(self.client.get('/orders',base_url='http://foreign.invalid:5000').status_code,403)
-        response=self.client.get('/scripts/kfz_address.user.js',base_url=self.origin)
-        self.assertEqual(response.status_code,200)
-        script=response.get_data(as_text=True)
-        self.assertIn('// @match        http://127.0.0.1:5000/orders*',script)
-        self.assertNotIn('GM_xmlhttpRequest',script)
-        response.close()
+        self.assertEqual(self.client.get('/scripts/legacy.user.js',base_url=self.origin).status_code,404)
         settings=self.client.get('/settings',base_url=self.origin).get_data(as_text=True)
-        self.assertIn('安装 / 更新本地地址助手',settings)
+        self.assertIn('下载 Edge / Chrome 扩展包',settings)
+        self.assertNotIn('安装 / 更新本地地址助手',settings)
 
     def test_native_extension_download_contains_only_fixed_install_files(self):
         from scripts.package_extension import FILES
@@ -85,9 +81,36 @@ class LocalUserscriptTests(unittest.TestCase):
             self.assertIsNone(archive.testzip())
             manifest=json.loads(archive.read('manifest.json'))
             self.assertEqual(manifest['manifest_version'],3)
-            self.assertEqual(manifest['version'],'1.0.0')
+            self.assertEqual(manifest['version'],'1.1.0')
             self.assertNotIn('<all_urls>',manifest['host_permissions'])
         response.close()
+
+    def test_collection_and_report_endpoints_require_local_csrf(self):
+        for path in ['/api/images/collect','/api/images/collect_target','/api/kongfz/unpaid_report']:
+            response=self.client.post(path,base_url=self.origin,json={})
+            self.assertEqual(response.status_code,403,path)
+
+    def test_unpaid_hint_only_updates_the_bound_order_when_phone_is_shared(self):
+        models.execute('UPDATE orders SET receiver_json=? WHERE id=1',(json.dumps(RECEIVER),))
+        models.execute('INSERT INTO orders(id,order_no,status,receiver_json) VALUES(2,?,?,?)',
+                       ('offline-local-2','pending',json.dumps(RECEIVER)))
+        response=self.client.post('/api/kongfz/unpaid_report',base_url=self.origin,
+            headers={'Origin':self.origin,'X-CSRF-Token':self.token},
+            json={'order_id':1,'phone':RECEIVER['receiver_mobile'],'name':RECEIVER['receiver_name'],
+                  'title':'测试图书','amount':6,'kf_no':'12345678'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['matched'],[1])
+        self.assertFalse(models.query('SELECT unpaid_hint FROM orders WHERE id=2',one=True)['unpaid_hint'])
+
+    def test_native_collection_receipt_keeps_explicit_book_target(self):
+        target='https://book.kongfz.com/1/2'
+        with patch('services.image_service.collect_target_info',return_value={'target':target,'title':'书A'}), \
+             patch('services.image_service.collect_xhs',return_value=1):
+            response=self.client.post('/api/images/collect',base_url=self.origin,
+                headers={'Origin':self.origin,'X-CSRF-Token':self.token},
+                json={'entry_url':target,'source':'xhs','urls':['https://test.xhscdn.com/offline.jpg']})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['target'],target)
 
 
 if __name__ == '__main__':

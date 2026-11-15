@@ -33,9 +33,6 @@ def install(app):
     def require_login():
         if request.endpoint in ('web_login','browser_auth','static'):
             return
-        # 安装包不含订单、凭据或会话；仅公开这个固定JS文件供油猴安装及更新。
-        if request.endpoint == 'products.userscript' and request.view_args.get('fname') == 'kfz_address.user.js' and request.method == 'GET':
-            return
         if authenticated():
             return
         if request.method not in ('GET','HEAD'):

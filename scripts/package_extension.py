@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
-FILES = ('manifest.json','policy.js','background.js','content.js','address-engine.js',
+FILES = ('manifest.json','policy.js','background.js','content.js','address-engine.js','collector.js',
          'popup.html','popup.js','PRIVACY.md','INSTALL.md','LICENSE')
 
 

@@ -12,13 +12,14 @@ Flask + SQLite + Playwright 的闲鱼图书采购管理系统。一个仓库包�
 | --- | --- |
 | 在自己电脑安装、启动、配置账号 | [Windows 安装与启动](docs/windows-install.md) |
 | 同步订单、采购、发货、选品与日常维护 | [使用说明](docs/user-guide.md) |
-| 安装独立 Edge / Chrome 地址助手（无需油猴） | [浏览器扩展安装](docs/browser-extension.md) |
+| 安装 Edge / Chrome 浏览器助手 | [浏览器扩展安装](docs/browser-extension.md) |
 | 部署到自己的 Linux 服务器 | [服务器部署说明](docs/server-deploy.md) |
 | 修改代码、了解模块职责 | [架构说明](ARCHITECTURE.md) |
+| 与最初源码、现用网站有何区别 | [版本对照](docs/version-comparison.md) |
 
-建议第一次使用者选择 Windows 本地版，安装独立浏览器扩展后，在常用 Chrome / Edge 从订单“找货源 / 去货源”进入孔夫子核对填址。无需油猴；也可使用“填单”打开项目专用浏览器。扩展 ZIP 下载后先解压，通过浏览器“加载解压缩的扩展程序”安装，目前尚未上架扩展商店。
+建议第一次使用者选择 Windows 本地版。安装独立扩展后，在常用 Chrome / Edge 从订单货源入口进入孔夫子核对填址，在图池入口使用收图功能；也可使用“填单”打开项目专用浏览器。扩展 ZIP 下载后先解压，通过浏览器“加载解压缩的扩展程序”安装，目前尚未上架扩展商店。
 
-[下载独立扩展 1.0.0](https://github.com/wutuobang888/xianshushu/releases/download/address-helper-v1.0.0/xianshushu-address-helper-1.0.0.zip) · [安装教程](docs/browser-extension.md)
+[下载独立扩展 1.1.0](https://github.com/wutuobang888/xianshushu/releases/download/address-helper-v1.1.0/xianshushu-address-helper-1.1.0.zip) · [安装教程](docs/browser-extension.md)
 
 ## Windows 本地快速体验
 
@@ -60,6 +61,7 @@ New-Item -ItemType Directory -Force $env:XIANSHUSHU_DATA_DIR | Out-Null
 
 2026-11-15 安装说明验证：在 Windows / Python 3.10.11 的全新虚拟环境安装 requirements.txt 成功，pip check 通过；使用独立演示数据目录、关闭调度后，八个业务页面均返回 HTTP 200。此验证不包含真实账号登录、采购提交或发货，也不代表完成了全新服务器部署验证。
 
-本地油猴 2.1.0：支持默认 localhost / 127.0.0.1 订单入口，同源 CSRF 取址、每单独立上下文、结算选址及新增后回读。相关本地接口、浏览器 DOM、原地址同步及云端认证共 61 项隔离回归通过；尚未在使用者的真实 Tampermonkey 配置和账号完成端到端验证。安装后先检查绿色启用提示，再逐笔核对收货信息。
 
-独立扩展 1.0.0 是新的推荐方案，无需油猴。后台策略 5 项、扩展填址引擎 3 项、本地接口与安装包 5 项、真正加载 MV3 扩展的浏览器流程 3 项检查通过。浏览器流程使用隔离 Chromium 配置与模拟订单，覆盖两位买家分别选址、无关联页面不填址及弹窗加载；未操作用户真实 Edge 账号，也未提交采购或付款。
+独立扩展 1.1.0 统一提供采购填址、小红书/孔夫子收图和待付款提示回传，仓库当前版本不再分发脚本管理器安装文件。验证使用隔离浏览器及模拟订单，覆盖两位买家分别选址、两本书分别回到对应图池、来源会话及 CSRF 校验；未操作用户真实 Edge 账号，也未提交真实采购或付款。
+
+本次迁移检查：225 项 Python 测试逐模块隔离执行通过，18 项 JavaScript 测试通过；八个业务页面的演示环境检查通过。旧文件在本机移入回收站，Git 历史保留，原项目及正式服务器未改动。

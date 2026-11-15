@@ -2,6 +2,7 @@
 (function (root) {
     'use strict';
     const TTL = 10 * 60 * 1000;
+    const COLLECT_TTL = 60 * 60 * 1000;
     const officialHosts = ['book.kongfz.com', 'item.kongfz.com', 'search.kongfz.com', 'order.kongfz.com'];
     function parse(value) { try { return new URL(value); } catch (_) { return null; } }
     function official(value) {
@@ -14,6 +15,14 @@
         if (!url || !['http:', 'https:'].includes(url.protocol)) return null;
         url.protocol = 'https:';
         return official(url.href) ? url.href : null;
+    }
+    function mediaSite(value) {
+        const url = parse(value);
+        return official(value) || (!!url && url.protocol === 'https:' && !url.port && !url.username && !url.password
+            && ['www.xiaohongshu.com','shop.kongfz.com'].includes(url.hostname));
+    }
+    function collection(value) {
+        return !!source(value?.entry_url) && typeof value?.title === 'string' && value.title.length <= 512;
     }
     function site(value, configured) {
         const url = parse(value);
@@ -29,10 +38,11 @@
             && /^\d{7,20}$/.test(receiver.receiver_mobile);
     }
     function active(record, now = Date.now()) {
-        return !!record && target(record.target) && Number.isFinite(record.expiresAt)
-            && record.expiresAt > now && record.expiresAt <= now + TTL;
+        const collect = record?.kind === 'collect';
+        return !!record && (collect ? collection(record.target) : target(record.target)) && Number.isFinite(record.expiresAt)
+            && record.expiresAt > now && record.expiresAt <= now + (collect ? COLLECT_TTL : TTL);
     }
-    const policy = { TTL, official, source, site, target, active };
+    const policy = { TTL, COLLECT_TTL, official, source, mediaSite, collection, site, target, active };
     root.XssPolicy = policy;
     if (typeof module !== 'undefined') module.exports = policy;
 })(globalThis);

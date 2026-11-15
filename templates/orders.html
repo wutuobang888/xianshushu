@@ -78,7 +78,7 @@
         {% if o.status in ('pending','purchasing') %}
         <a class="btn btn-sm {{ 'btn-success' if o.jump_direct else 'btn-outline-primary' }} mb-1"
            href="{{ url_for('orders.source_prepare', oid=o.id) if cloud_mode else o.jump_url }}" target="_blank" rel="noopener" title="{{ '核对本单地址后直接打开孔夫子' if cloud_mode else o.jump_url }}"
-           {% if cloud_mode %}data-xss-native-source="{{ o.id }}" data-source-url="{{ o.jump_url }}"{% else %}data-xss-order="{{ o.id }}" onclick="prepareSource({{ o.id }})"{% endif %}>
+           {% if cloud_mode %}data-xss-native-source="{{ o.id }}" data-source-url="{{ o.jump_url }}"{% else %}data-xss-order="{{ o.id }}"{% endif %}>
             <i class="bi {{ 'bi-box-arrow-up-right' if o.jump_direct else 'bi-search' }}"></i>
             {{ '去货源' if o.jump_direct else '找货源' }}</a>
         {% if cloud_mode %}<small class="d-block mb-1" data-source-sync-status="{{ o.id }}" role="status" aria-live="polite" hidden></small>{% endif %}
@@ -118,7 +118,7 @@
                    placeholder="成本" autocomplete="off">
             <button class="btn btn-sm btn-primary text-nowrap">绑定</button>
         </form>
-        {# 孔夫子已下单待付款：油猴上报/监控扫到/手动标记的灰色提示（未付款不绑定） #}
+        {# 孔夫子待付款：扩展回传、后台监控或手动标记；未付款不绑定。 #}
         {% set hints = unpaid_map.get(o.id) %}
         {% set manual_marked = hints and (hints|selectattr('manual')|list|length > 0) %}
         <div id="hints-{{ o.id }}">
@@ -263,16 +263,6 @@ function hintHtml(hints) {
     }).join('');
     return '<div class="border rounded p-1 mt-1 bg-light">'
         + '<small class="text-muted d-block">孔夫子已下单待付款：</small>' + rows + '</div>';
-}
-
-// 点找货源/去货源：后台设为孔夫子填单目标（油猴在下单页一键填收货地址），
-// 同时把收货信息复制到剪贴板兜底。
-function prepareSource(oid) {
-    if (document.documentElement.dataset.xssAddressHelper) return;
-    {% if cloud_mode %}
-    return; // 云端由 source-immediate.js 并行同步地址，不设置旧油猴目标。
-    {% endif %}
-    try { navigator.sendBeacon('/orders/' + oid + '/prepare_source'); } catch(e) {}
 }
 
 {% if not cloud_mode %}

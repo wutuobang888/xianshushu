@@ -27,6 +27,10 @@ class CheckoutTaskTests(unittest.TestCase):
         self.patcher = patch.object(models, 'get_db', self.connection)
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
+        # 测试不探测真实 PID；Windows 的信号0可能中断同控制台进程。
+        alive = patch.object(task, '_alive', return_value=True)
+        alive.start()
+        self.addCleanup(alive.stop)
         self.addCleanup(self.anchor.close)
         for oid in (1,2):
             models.execute('INSERT INTO orders(id,order_no,status,receiver_json) VALUES(?,?,?,?)',

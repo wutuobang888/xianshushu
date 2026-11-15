@@ -108,8 +108,7 @@ import models
 def offline_write(): return {'ok':True}
 client=app.test_client()
 assert client.get('/orders',base_url='https://test.invalid').status_code == 302
-script=client.get('/scripts/kfz_address.user.js',base_url='https://test.invalid')
-assert script.status_code == 200 and '@version      2.1.0' in script.get_data(as_text=True)
+assert client.get('/downloads/address-extension.zip',base_url='https://test.invalid').status_code == 302
 assert client.post('/orders/1/browser_target',base_url='https://test.invalid').status_code == 401
 assert client.post('/orders/1/sync_address',base_url='https://test.invalid').status_code == 401
 assert client.get('/internal/browser-auth',base_url='https://test.invalid').status_code == 401
@@ -122,6 +121,7 @@ assert client.get('/internal/browser-auth',base_url='https://test.invalid').stat
 login=client.post('/login',base_url='https://test.invalid',data={'username':'offline','password':'offline-test-password','csrf_token':token,'next':'//evil.invalid'})
 assert login.status_code == 302 and login.location == '/orders'
 assert client.get('/internal/browser-auth',base_url='https://test.invalid').status_code == 204
+assert client.get('/scripts/legacy.user.js',base_url='https://test.invalid').status_code == 404
 assert client.get('/orders/cloud_purchase',base_url='https://test.invalid').json['task'] is None
 assert client.post('/orders/999/cloud_purchase',base_url='https://test.invalid').status_code == 403
 pages={path:client.get(path,base_url='https://test.invalid').status_code for path in

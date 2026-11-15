@@ -270,8 +270,7 @@ def _fetch_receiver(order_no, client=None):
 
 
 def prepare_source(order_id):
-    """点「找货源」时调用：拉订单详情的收货信息缓存到 receiver_json，
-    并把它设为孔夫子填单的当前目标（油猴脚本读这个）。"""
+    """为项目专用浏览器准备这笔订单的收货信息。"""
     order = models.query("SELECT * FROM orders WHERE id=?", (order_id,), one=True)
     if not order:
         return None
@@ -280,21 +279,7 @@ def prepare_source(order_id):
         if recv:
             order = dict(order)
             order["receiver_json"] = json.dumps(recv, ensure_ascii=False)
-    models.set_setting("source_order_id", str(order_id))
     return order
-
-
-def source_target():
-    """油猴脚本查询：当前待填单的订单 + 收货信息。没有或已绑定过就返回空。"""
-    oid = models.get_setting("source_order_id")
-    if not oid:
-        return None
-    order = models.query("SELECT * FROM orders WHERE id=?", (oid,), one=True)
-    if not order or order["status"] not in ("pending", "purchasing"):
-        return None
-    recv = normalize_receiver(json.loads(order["receiver_json"] or "{}"))
-    return {"order_id": order["id"], "order_no": order["order_no"],
-            "product_title": order["product_title"], "receiver": recv}
 
 
 def start_fill_checkout(order_id, kongfz_url=None):
@@ -579,7 +564,6 @@ def list_orders(status=None, keyword=None, page=1, size=50, sort="desc"):
             d["jump_url"] = ("https://search.kongfz.com/booklib/?keyword="
                              + quote(key))
             d["jump_direct"] = False
-        d["jump_url"] = _with_order_mark(d["jump_url"], o["id"])
         out.append(d)
     return out, total
 
@@ -601,13 +585,6 @@ def _with_list_filters(url):
     """条目列表页带上默认筛选：总价从低到高 + 八品以上（商品页不适用）。"""
     if "item.kongfz.com" in url and "sortType=" not in url:
         return url + ("&" if "?" in url else "?") + "sortType=7&quality=80~"
-    return url
-
-
-def _with_order_mark(url, order_id):
-    """跳转链接带订单号标记：油猴落地页据此识别"这单是网站跳来的"（kongfz 忽略未知参数）。"""
-    if "kongfz.com" in url:
-        return url + ("&" if "?" in url else "?") + f"xsb_oid={order_id}"
     return url
 
 
@@ -785,14 +762,22 @@ def bind_picked(order_id, nos):
 
 
 def record_unpaid_report(phone, name="", addr="", title="",
-                         amount=None, kf_no="", ts=""):
-    """油猴上报：孔夫子点了"提交订单"（未付款）。按收货手机号找到待采购订单，
+                         amount=None, kf_no="", ts="", order_id=None):
+    """浏览器扩展上报手工点击提交后的待付款提示，按手机号核对待采购订单，
     记一条"已下单待付款"提示（不进 kongfz_orders，付款后才算正式绑定）。
     有单号时同时 upsert 进 kongfz_scanned，监控下一轮会刷新它的真实状态。
     返回匹配到的订单 id 列表。"""
     from datetime import datetime
     phone = (phone or "").strip()
     if not phone:
+        return []
+    sql = "SELECT id,unpaid_hint FROM orders WHERE receiver_json LIKE ? AND status='pending'"
+    args = [f"%{phone}%"]
+    if order_id is not None:
+        sql += " AND id=?"
+        args.append(order_id)
+    rows = models.query(sql, args)
+    if order_id is not None and not rows:
         return []
     if kf_no:
         models.execute(
@@ -805,10 +790,6 @@ def record_unpaid_report(phone, name="", addr="", title="",
             " scanned_at=CURRENT_TIMESTAMP",
             (kf_no, title, amount, "待付款",
              datetime.now().strftime("%Y-%m-%d"), name, phone, addr))
-    rows = models.query(
-        "SELECT id,unpaid_hint FROM orders"
-        " WHERE receiver_json LIKE ? AND status='pending'",
-        (f"%{phone}%",))
     matched = []
     for o in rows:
         try:
@@ -862,7 +843,7 @@ def toggle_unpaid_manual(order_id, on=None):
 
 
 def unpaid_hints_for(orders):
-    """订单页"孔夫子已下单待付款"灰色提示：合并监控扫到的待付款单 + 油猴上报。
+    """订单页待付款提示：合并监控结果与浏览器扩展回传。
     返回 {order_id: [{title,amount,kf_no,name,name_match}]}。"""
     from datetime import datetime, timedelta
     cutoff = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")

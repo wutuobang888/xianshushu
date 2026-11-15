@@ -49,7 +49,8 @@ def create_app():
         def protect_local_address_helper():
             if request.host.split(':')[0] not in ('127.0.0.1', 'localhost'):
                 abort(403)
-            if request.endpoint == 'orders.browser_target':
+            if request.method not in ('GET','HEAD','OPTIONS') and request.endpoint in (
+                    'orders.browser_target','products.collect_images','products.collect_target','orders.kongfz_unpaid_report'):
                 origin = request.headers.get('Origin', '')
                 token = request.headers.get('X-CSRF-Token', '')
                 if (origin != request.host_url.rstrip('/')

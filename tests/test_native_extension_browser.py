@@ -27,6 +27,8 @@ class NativeExtensionBrowserTests(unittest.TestCase):
         self.targets={i:dict(order_id=i,order_no='offline-native-'+str(i),receiver=dict(RECEIVER,
             receiver_name='测试买家'+str(i),address='测试路'+str(i)+'号')) for i in [1,2]}
         self.reads=[]
+        self.collections=[]
+        self.reports=[]
         self.saved=[]
         self.context.route('**/*',self.handle)
 
@@ -39,15 +41,31 @@ class NativeExtensionBrowserTests(unittest.TestCase):
 
     def handle(self,route):
         url=route.request.url
+        if url.endswith('/api/images/collect'):
+            body=route.request.post_data_json
+            self.collections.append({'body':body,'csrf':route.request.headers.get('x-csrf-token')})
+            return route.fulfill(json={'ok':True,'count':len(body['urls']),'target':body['entry_url'],'title':'测试图池'})
+        if url.endswith('/api/kongfz/unpaid_report'):
+            self.reports.append(route.request.post_data_json)
+            return route.fulfill(json={'ok':True,'matched':[route.request.post_data_json['order_id']]})
         if url.endswith('/browser_target'):
             oid=int(url.split('/orders/')[1].split('/')[0])
             self.reads.append({'id':oid,'csrf':route.request.headers.get('x-csrf-token')})
             return route.fulfill(json={'ok':True,'target':self.targets[oid]})
-        if url.startswith('http://127.0.0.1:5000/'):
+        if url.startswith('http://127.0.0.1:5000/publish'):
+            html='<main><script data-csrf="offline-token"></script>'
+            for i in [1,2]:
+                message=json.dumps(dict(channel='xss-extension',type='OPEN_COLLECT',url=f'https://www.xiaohongshu.com/search_result?book={i}',
+                    target=dict(entry_url=f'https://book.kongfz.com/1/{i}',title=f'书{i}')),ensure_ascii=False)
+                html+=f'<button id="collect{i}">图池{i}</button><script>document.getElementById("collect{i}").onclick=()=>window.postMessage({message},location.origin)</script>'
+            html+='</main>'
+        elif url.startswith('http://127.0.0.1:5000/'):
             html='<main><script data-csrf="offline-token"></script>'+''.join(
                 f'<a data-xss-order="{i}" href="https://book.kongfz.com/1/{i}">订单{i}货源</a>' for i in [1,2])+'</main>'
         elif url.startswith('https://book.kongfz.com/'):
             html='<button onclick="window.open(\'https://order.kongfz.com/checkout\',\'_blank\')">立即购买</button>'
+        elif url.startswith('https://www.xiaohongshu.com/'):
+            html='<meta property="og:image" content="https://test.xhscdn.com/offline.jpg"><h1>离线笔记</h1>'
         else:
             html=self.cards()
         route.fulfill(body='<meta charset="utf-8">'+html,content_type='text/html')
@@ -91,3 +109,26 @@ class NativeExtensionBrowserTests(unittest.TestCase):
         self.assertEqual(page.get_by_role('heading',name='闲书书采购地址助手').count(),1)
         self.assertEqual(page.locator('input[type=password]').count(),0)
         self.assertEqual(page.locator('#site').input_value(),'')
+
+    def test_collection_targets_return_to_their_own_source_pool_with_csrf(self):
+        source=self.context.new_page();source.goto('http://127.0.0.1:5000/publish')
+        source.get_by_text('闲书书扩展已启用',exact=False).wait_for()
+        pages=[]
+        for i in [1,2]:
+            with self.context.expect_page() as event:source.get_by_text(f'图池{i}',exact=True).click()
+            page=event.value;page.locator('#xhs-collect-float').wait_for();pages.append(page)
+        for page in pages:
+            page.locator('#xhs-collect-float').click()
+            page.get_by_text('已收 1 张图',exact=False).wait_for()
+        self.assertEqual([r['body']['entry_url'] for r in self.collections],
+                         ['https://book.kongfz.com/1/1','https://book.kongfz.com/1/2'])
+        self.assertTrue(all(r['csrf']=='offline-token' for r in self.collections))
+
+    def test_manual_submit_observer_only_reports_bound_order_to_own_site(self):
+        page=self.checkout(self.open_source(1))
+        # 仅点击离线合成按钮；没有真实平台或支付请求。
+        page.get_by_text('提交订单',exact=True).click()
+        self.context.pages[0].wait_for_timeout(500)
+        self.assertEqual(len(self.reports),1)
+        self.assertEqual(self.reports[0]['order_id'],1)
+        self.assertEqual(self.reports[0]['phone'],'13800000000')

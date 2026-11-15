@@ -1,66 +1,8 @@
-// ==UserScript==
-// @name         闲鱼选品-小红书收图
-// @namespace    xianshouself
-// @version      2.7
-// @description  从网站图池打开小红书笔记或孔夫子卖家商品页，点击收图回到当前书籍图池。
-//               从网站图池打开，目标随链接绑定到标签页；不读取后台全局旧目标。
-// @match        https://www.xiaohongshu.com/*
-// @match        https://item.kongfz.com/*
-// @match        https://book.kongfz.com/*
-// @match        https://search.kongfz.com/*
-// @match        https://shop.kongfz.com/*
-// @updateURL    http://127.0.0.1:5000/scripts/xhs_collect.user.js
-// @downloadURL  http://127.0.0.1:5000/scripts/xhs_collect.user.js
-// @grant        GM_xmlhttpRequest
-// @connect      127.0.0.1
-// @connect      localhost
-// @run-at       document-idle
-// ==/UserScript==
-
-(function () {
+/* 图池采集器：只有本站明确绑定的收图标签页才显示按钮。 */
+globalThis.XssImageCollector = function (target) {
     'use strict';
-
-    const API = 'http://127.0.0.1:5000/api/images/collect';
-    const TARGET_KEY = 'xs_collect_target_v2';
-    const isKongfz = /^https:\/\/(?:item|book|search|shop)\.kongfz\.com\//.test(location.href);
-    let tabTarget = null;
-    function currentTarget() {
-        const params = new URLSearchParams(location.hash.slice(1));
-        if (params.has('xs_collect') && params.get('entry_url')) {
-            tabTarget = {entry_url: params.get('entry_url'), title: params.get('book_title') || '当前书籍'};
-            try { sessionStorage.setItem(TARGET_KEY, JSON.stringify(tabTarget)); } catch (e) {}
-        }
-        if (!tabTarget) {
-            try { tabTarget = JSON.parse(sessionStorage.getItem(TARGET_KEY) || 'null'); } catch (e) {}
-        }
-        return tabTarget && tabTarget.entry_url ? tabTarget : null;
-    }
-    if (currentTarget()) boot();
-    window.addEventListener('hashchange', () => { if (currentTarget()) ensureButton(); });
-
-    function boot() {
-        new MutationObserver(ensureButton).observe(
-            document.body, { childList: true, subtree: true });
-        ensureButton();
-        if (isKongfz) {
-            // 跨子域/新标签页不能共享sessionStorage，把目标继续带到卖家链接。
-            document.addEventListener('click', forwardTarget, true);
-            document.addEventListener('auxclick', forwardTarget, true);
-        }
-        setTimeout(() => toast(`收图目标：《${currentTarget().title}》，${isKongfz ? '进入卖家商品详情页' : '打开笔记'}后点「收图」`), 1200);
-    }
-
-    function forwardTarget(event) {
-        const anchor = event.target.closest?.('a[href]');
-        const target = currentTarget();
-        if (!anchor || !target) return;
-        const url = new URL(anchor.href, location.href);
-        if (!/^(item|book|search|shop)\.kongfz\.com$/.test(url.hostname)) return;
-        url.hash = 'xs_collect&entry_url=' + encodeURIComponent(target.entry_url)
-            + '&book_title=' + encodeURIComponent(target.title);
-        anchor.href = url.href;
-    }
-
+    const isKongfz=location.hostname!=='www.xiaohongshu.com';
+    const currentTarget=()=>target;
     function isSellerDetail() {
         return /^https:\/\/book\.kongfz\.com\/\d+\/\d+(?:\/|[?#]|$)/.test(location.href);
     }
@@ -136,30 +78,14 @@
         return (t && t.textContent.trim()) || document.title || '';
     }
 
-    function post(urls) {
-        const target = currentTarget();
-        if (!target) { toast('缺少收图目标，请从网站图池重新打开找图网站', false); return; }
-        GM_xmlhttpRequest({
-            method: 'POST',
-            url: API,
-            headers: { 'Content-Type': 'application/json' },
-            data: JSON.stringify({
-                urls: urls,
-                note_url: location.href.split(/[?#]/)[0],
-                note_title: noteTitle().slice(0, 80),
-                entry_url: target.entry_url,
-                source: isKongfz ? 'kongfz' : 'xhs',
-            }),
-            onload(r) {
-                try {
-                    const d = JSON.parse(r.responseText);
-                    if (r.status >= 200 && r.status < 300 && d.ok && d.count > 0 && d.target === target.entry_url)
-                        toast(`✓ 已收 ${d.count} 张图到《${d.title || target.title}》`);
-                    else toast(d.error || '收图失败', false);
-                } catch (e) { toast('回传失败: ' + e, false); }
-            },
-            onerror() { toast('连不上本地网站(127.0.0.1:5000)，网站开着吗？', false); },
-        });
+    async function post(urls) {
+        try {
+            const result=await chrome.runtime.sendMessage({type:'COLLECT_IMAGES',payload:{urls,
+                note_title:noteTitle().slice(0,80)}});
+            if (!result.ok || !result.count || result.target!==target.entry_url)
+                throw new Error(result.error || '回传目标不一致或没有成功缓存图片');
+            toast(`✓ 已收 ${result.count} 张图到《${result.title || target.title}》`);
+        } catch(error) { toast(error.message || '收图失败，请保持原闲书书图池页面打开',false); }
     }
 
     function doCollect() {
@@ -184,4 +110,7 @@
         b.onclick = doCollect;
         document.body.appendChild(b);
     }
-})();
+
+    new MutationObserver(ensureButton).observe(document.body,{childList:true,subtree:true});
+    ensureButton();
+};

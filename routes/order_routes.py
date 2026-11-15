@@ -122,13 +122,6 @@ def ship(oid):
                     + f"#o{oid}")
 
 
-@bp.route("/orders/<int:oid>/prepare_source", methods=["POST"])
-def prepare_source(oid):
-    """点「找货源」时 beacon 过来：后台拉收货详情 + 设为孔夫子填单目标。"""
-    order = order_service.prepare_source(oid)
-    return jsonify({"ok": bool(order)})
-
-
 @bp.route("/orders/<int:oid>/fill_checkout", methods=["POST"])
 def fill_checkout(oid):
     """拉起孔夫子下单页自动填表（可见浏览器，停手不提交）。"""
@@ -214,15 +207,9 @@ def cloud_purchase_close():
         return jsonify(ok=False, error=str(error)), 400
 
 
-@bp.route("/orders/source_target")
-def source_target():
-    """孔夫子油猴脚本查：当前待填单的收货信息。"""
-    return jsonify({"target": order_service.source_target()})
-
-
 @bp.route("/api/kongfz/unpaid_report", methods=["POST"])
 def kongfz_unpaid_report():
-    """油猴上报：孔夫子"提交订单"（未付款）。记"已下单待付款"提示，
+    """浏览器扩展回传手工提交后的待付款提示，
     按收货手机号匹配待采购订单。不做绑定——付款后由监控正式绑定。"""
     d = request.get_json(silent=True) or request.form
     try:
@@ -233,7 +220,8 @@ def kongfz_unpaid_report():
     matched = order_service.record_unpaid_report(
         phone=d.get("phone"), name=d.get("name"), addr=d.get("addr"),
         title=d.get("title"), amount=amount,
-        kf_no=(d.get("kf_no") or "").strip(), ts=d.get("ts"))
+        kf_no=(d.get("kf_no") or "").strip(), ts=d.get("ts"),
+        order_id=d.get('order_id'))
     return jsonify({"ok": True, "matched": matched})
 
 
