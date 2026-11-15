@@ -27,6 +27,7 @@ table inet xss_acceptance {
   type filter hook output priority 0; policy drop;
   oifname "lo" accept
   udp sport 68 udp dport 67 accept
+  ip daddr 10.0.2.2 tcp sport 22 accept
   ct state established,related accept
  }
 }

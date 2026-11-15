@@ -135,7 +135,9 @@ try:
     for _ in range(100):
         ready=DATA/'fixture-browser-ready'
         if ready.exists() and ready.stat().st_mtime>=launched:break
-        assert subprocess.run(['systemctl','is-active','--quiet','xss-acceptance-headed']).returncode==0,'headed browser failed'
+        if subprocess.run(['systemctl','is-active','--quiet','xss-acceptance-headed']).returncode!=0:
+            subprocess.run(['journalctl','-u','xss-acceptance-headed','-n','25','--no-pager'])
+            raise AssertionError('headed browser failed')
         time.sleep(.1)
     else:raise AssertionError('headed browser did not show test page')
     os.environ['PLAYWRIGHT_BROWSERS_PATH']='/srv/xianshushu/browsers'

@@ -59,4 +59,6 @@ subprocess.run(['systemctl','enable','xianshushu-display','xianshushu-window-man
 print('Configured new isolated instance with interactive credential script; no production settings used')
 
 shutil.copyfile(source/'tests/server_vm/fixture_browser.py', base/'live-data/fixture-browser.py')
+os.chown(base/'live-data/fixture-browser.py',33,33)
+os.chmod(base/'live-data/fixture-browser.py',0o600)
 Path('/etc/systemd/system/xss-acceptance-headed.service').write_text('[Unit]\nRequires=xianshushu-display.service\nAfter=xianshushu-display.service\nJoinsNamespaceOf=xianshushu-display.service\n[Service]\nUser=www-data\nGroup=www-data\nEnvironmentFile=/etc/xianshushu-production.env\nExecStart=/srv/xianshushu/live-venv/bin/python /srv/xianshushu/live-data/fixture-browser.py\nPrivateTmp=true\nProtectSystem=strict\nProtectHome=true\nReadWritePaths=/srv/xianshushu/live-data\n')
