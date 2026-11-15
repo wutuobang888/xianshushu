@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """图片上传与裁剪回归：模拟网络，不发布商品。"""
 import json
+import os
 import subprocess
 import unittest
+from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import cv2
@@ -11,12 +14,19 @@ from services import image_service as images
 
 
 class ImageUploadTests(unittest.TestCase):
+    @contextmanager
+    def windows_transport(self):
+        # 只替换被测模块的平台分支，不改变 pathlib 使用的全局操作系统类型。
+        with patch.object(images, 'os', SimpleNamespace(name='nt', environ=os.environ)), \
+                patch.object(images.subprocess, 'CREATE_NO_WINDOW', 0, create=True):
+            yield
+
     def response(self, data):
         return subprocess.CompletedProcess([], 0, json.dumps(data).encode(), b'')
 
     def test_windows_upload_uses_current_endpoint_and_system_tls(self):
         response = self.response({'success': True, 'files': [{'url': 'https://n.uguu.se/book.jpg'}]})
-        with patch.object(images.subprocess, 'run', return_value=response) as run, \
+        with self.windows_transport(), patch.object(images.subprocess, 'run', return_value=response) as run, \
                 patch.object(images.Path, 'is_file', return_value=True), \
                 patch.object(images.requests, 'post') as post:
             url = images._rehost(b'processed-image', 'book401.jpg')
@@ -33,14 +43,14 @@ class ImageUploadTests(unittest.TestCase):
                      subprocess.CompletedProcess([], 0, b'not json', b''),
                      subprocess.CompletedProcess([], 22, b'', b'HTTP 500')]
         for response in responses:
-            with self.subTest(response=response.stdout), \
+            with self.subTest(response=response.stdout), self.windows_transport(), \
                     patch.object(images.Path, 'is_file', return_value=True), \
                     patch.object(images.subprocess, 'run', return_value=response):
                 with self.assertRaises(RuntimeError):
                     images._rehost(b'processed-image')
 
     def test_timeout_keeps_failure_explicit(self):
-        with patch.object(images.Path, 'is_file', return_value=True), \
+        with self.windows_transport(), patch.object(images.Path, 'is_file', return_value=True), \
                 patch.object(images.subprocess, 'run', side_effect=subprocess.TimeoutExpired('curl', 65)):
             with self.assertRaisesRegex(RuntimeError, '本地图片已保留'):
                 images._rehost(b'processed-image')

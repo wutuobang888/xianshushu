@@ -5,6 +5,7 @@ After=network.target
 [Service]
 User=www-data
 Group=www-data
+ExecStartPre=!/usr/bin/install -d -o root -g root -m 1777 /tmp/.X11-unix
 ExecStart=/usr/bin/Xvfb :99 -screen 0 1366x900x24 -nolisten tcp -auth /srv/xianshushu/live-data/Xauthority
 Restart=on-failure
 RestartSec=5

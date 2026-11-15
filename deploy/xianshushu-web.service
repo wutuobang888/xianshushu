@@ -9,8 +9,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=/srv/xianshushu/live-app
 EnvironmentFile=/etc/xianshushu-production.env
-Environment=XIANSHUSHU_SCHEDULER=0
-ExecStart=/srv/xianshushu/live-venv/bin/gunicorn --bind 127.0.0.1:5051 --workers 1 --threads 4 --timeout 90 --access-logfile - --error-logfile - production_wsgi:app
+ExecStart=/usr/bin/env XIANSHUSHU_SCHEDULER=0 /srv/xianshushu/live-venv/bin/gunicorn --bind 127.0.0.1:5051 --workers 1 --threads 4 --timeout 90 --access-logfile - --error-logfile - production_wsgi:app
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

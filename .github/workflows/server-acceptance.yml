@@ -1,0 +1,33 @@
+name: Server installation acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debian:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install VM tools on the disposable runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils
+      - name: Deploy and verify a fresh Debian VM
+        run: python3 tests/server_vm/run.py
+      - name: Preserve sanitized reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-acceptance
+          path: |
+            work/server-vm/results/*.json
+            work/server-vm/results/*.png
+            work/server-vm/results/*.log
+          retention-days: 3
+          if-no-files-found: warn

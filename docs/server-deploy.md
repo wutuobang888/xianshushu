@@ -1,8 +1,10 @@
 # Linux 服务器部署说明
 
-这是面向能管理 Linux、systemd 和 HTTPS 反向代理的部署者的说明。没有服务器经验时，建议先按 [Windows 安装说明](windows-install.md) 在本机使用。服务器部分保留原部署结构，并非自动安装器；尚未在所有新服务器环境验证。
+这是面向能管理 Linux、systemd 和 HTTPS 反向代理的部署者的说明。没有服务器经验时，建议先按 [Windows 安装说明](windows-install.md) 在本机使用。它不是一键安装器，以下步骤适用于独立的新实例。
 
 以下以 Debian 系统、独立新实例为例。需要自己的域名、已指向服务器的 DNS、有效 HTTPS 证书、闲管家授权和孔夫子账号。命令里的 `books.example.com` 必须替换为自己的域名。安装前确认目录、端口和服务名未被已有业务使用；不要覆盖现有实例。
+
+2026-11-15 已在全新 Debian 13 / Python 3.13.5 隔离系统中按下述流程完成安装、HTTPS 登录、桌面网关和定时任务验收。具体检查及合成平台测试的边界见 [服务器验收记录](server-verification.md)。
 
 ## 1. 安装运行环境
 
@@ -60,25 +62,7 @@ TZ=Asia/Shanghai
 在自己的服务器终端交互设置网站登录账号、密码及孔夫子凭据加密密钥。以下仅用于尚无这些文件的新实例；重复执行会被独占创建模式拦截，不能用于覆盖旧密钥：
 
 ```bash
-/srv/xianshushu/live-venv/bin/python - <<'PY'
-import getpass, json, os
-from pathlib import Path
-from werkzeug.security import generate_password_hash
-from cryptography.fernet import Fernet
-os.umask(0o077)
-username = input('网站账号: ').strip()
-password = getpass.getpass('网站密码: ')
-confirmation = getpass.getpass('再次输入密码: ')
-if not username or not password or password != confirmation:
-    raise SystemExit('账号为空或两次密码不一致，未保存')
-paths = [Path('/etc/xianshushu/web-access.json'), Path('/etc/xianshushu/kongfz.key')]
-if any(p.exists() for p in paths):
-    raise SystemExit('凭据文件已存在，请保留原配置，不要覆盖')
-with paths[0].open('x') as f:
-    json.dump({'username': username, 'password_hash': generate_password_hash(password)}, f)
-with paths[1].open('xb') as f:
-    f.write(Fernet.generate_key())
-PY
+/srv/xianshushu/live-venv/bin/python /srv/xianshushu/live-app/scripts/init_server_credentials.py
 chown root:www-data /etc/xianshushu-production.env /etc/xianshushu/web-access.json /etc/xianshushu/kongfz.key
 chmod 0640 /etc/xianshushu-production.env /etc/xianshushu/web-access.json /etc/xianshushu/kongfz.key
 ```
@@ -103,6 +87,13 @@ systemctl enable --now xianshushu-display.service xianshushu-window-manager.serv
 ```
 
 此时先不启动 worker。确认 5051、5900、6080 都只监听回环地址。模板中的 VNC 不提供独立密码，依赖回环监听及 nginx 网站认证保护，不能把这两个浏览器端口开放到公网。
+
+```bash
+systemctl is-active xianshushu-display xianshushu-window-manager xianshushu-vnc xianshushu-browser xianshushu-web
+ss -ltnp
+```
+
+五项应全部为 `active`，并且稍候能看到三个回环监听端口。`activating` 可能正在反复重试，不表示成功；用 `journalctl -u 对应服务名 -n 60 --no-pager` 查错。显示模板会在自身 PrivateTmp 中准备 root 所有的 `/tmp/.X11-unix`，不要删去该准备命令，也不要通过关闭 Xauthority 验证解决连接错误。
 
 ## 4. 配置 HTTPS 和 nginx
 
@@ -147,6 +138,8 @@ systemctl reload nginx
 4. 浏览器地址使用 `/browser/vnc.html?autoconnect=1&resize=scale&path=/browser/websockify`；path 中的前导 `/` 不可省略。
 5. 等待显示登录成功并正常结束窗口。采购仍在普通孔夫子网页完成，服务器窗口主要用于登录与验证。
 
+在自己电脑的普通 Edge / Chrome 采购时，建议按 [独立扩展教程](browser-extension.md) 连接自己的 HTTPS 网站，在同一浏览器登录孔夫子，并确认订单页显示扩展已启用。后台项目浏览器的登录态与普通浏览器互相独立。
+
 不要在有人登录或采购时重启 Web 服务。首次账户没有历史地址同步策略；不要把自己实例的账号或地址编号换成其他人的固定编号，也不要仅根据设置页文案认为满额地址自动清理已配置。
 
 ## 6. 启用后台任务
@@ -159,7 +152,9 @@ systemctl is-active xianshushu-web.service xianshushu-worker.service
 journalctl -u xianshushu-worker.service -n 80 --no-pager
 ```
 
-worker 模板覆盖 `XIANSHUSHU_SCHEDULER=1`；Web 模板保持 0。只允许一个 worker；自动监控可能真实回填闲鱼发货。采购提交和付款仍由人工操作。
+worker 和 Web 的 `ExecStart` 分别通过 `/usr/bin/env` 固定调度开关为 1 和 0。systemd 的 EnvironmentFile 优先于 Environment，不能把这个写法简化成仅添加一行 Environment，否则共用环境文件中的 0 会使 worker 启动失败。只允许一个 worker；自动监控可能真实回填闲鱼发货。采购提交和付款仍由人工操作。
+
+日志应出现 `Scheduler started`；已配置闲管家凭据时，还应注册 `order_sync`、`refund_sync` 和 `product_sync`。仅显示 `active` 不代表已经配置平台或定时同步已成功；到期后核对任务日志及订单数据。
 
 ## 7. 验证、备份与维护
 

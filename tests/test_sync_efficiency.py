@@ -1,5 +1,6 @@
 """同步范围与重复写入回归；独立内存数据库，不触碰业务订单。"""
 import json
+import os
 import sqlite3
 import sys
 import unittest
@@ -129,7 +130,7 @@ class TradingFilterTests(unittest.TestCase):
     def test_filter_waits_for_response_and_accepts_hidden_duplicate_label(self):
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
-            browser = p.chromium.launch(channel="msedge", headless=True)
+            browser = p.chromium.launch(channel="msedge" if os.name == "nt" else None, headless=True)
             page = browser.new_page()
             page.route("**/buyer/order/list", lambda r: r.fulfill(json={"status": True}))
             page.route("**/fixture", lambda r: r.fulfill(body="""

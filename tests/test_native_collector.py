@@ -1,5 +1,6 @@
 """独立扩展收图器的真实 DOM 回归；只使用合成网页。"""
 from pathlib import Path
+import os
 import unittest
 from playwright.sync_api import sync_playwright
 
@@ -10,7 +11,7 @@ class NativeCollectorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.runtime=sync_playwright().start()
-        cls.browser=cls.runtime.chromium.launch(channel='msedge',headless=True)
+        cls.browser=cls.runtime.chromium.launch(channel='msedge' if os.name == 'nt' else None,headless=True)
 
     @classmethod
     def tearDownClass(cls):
